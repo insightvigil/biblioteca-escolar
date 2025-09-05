@@ -1,0 +1,32 @@
+.book-card { 
+    display: grid;
+    grid-template-rows: 250px auto;
+    gap:.5rem; 
+    padding: .5rem;
+    border:1px solid #30363d; 
+    border-radius: .75rem; 
+    background:#0e141b; 
+    justify-self: stretch;
+        
+        img {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+        }
+
+        .info { 
+            
+            h3 {font-size: 0.95rem; 
+                margin:.2rem 0; 
+                line-height:1.2;}
+
+            p {
+                font-size: 0.80rem;
+            }
+        }
+    
+    
+    
+    }
+.book-detail .media img { width:100%; height:100%; object-fit:cover; border-radius:.5rem; }
+.book-card .ph { display:grid; place-items:center; background:#111820; border-radius:.5rem; color:#8b949e; }

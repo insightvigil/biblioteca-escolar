@@ -1,3 +1,4 @@
+
 export default function CategorySection({ title, categories = [] }) {
   return (
     <section className="category-section">

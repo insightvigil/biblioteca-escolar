@@ -1,0 +1,32 @@
+@use '../../styles/variables.scss' as *;
+.navbar {
+    background-color: $primary-color;background: rgba(22,27,34,.9); backdrop-filter: blur(8px);
+    position: sticky; 
+    top: 0; 
+    z-index: 10;  
+    backdrop-filter: blur(8px); 
+    border-bottom: 1px solid #30363d;
+    
+    .brand {
+        
+        display:flex;
+        align-items: center;
+        font-weight: 700; 
+        letter-spacing: .5px;
+        .logos {
+        img {
+            height:  50px;
+            margin: 0 10px;
+            }
+        }
+
+    }
+
+    .wrap a {
+        margin: 1;
+    }
+}
+
+
+
+.navbar .wrap { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .75rem 1rem; max-width: 1200px; margin: 0 auto; }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { fetchHome } from '../../services/api';
 import BookCard from '../../components/BookCard/book-card.component';
-
+import './home.styles.scss';
 export default function Home() {
   const [cats, setCats] = useState([]);
   const [books, setBooks] = useState([]);
