@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import SearchBar from '../SearchBar/search-bar.component';
 
 export default function NavBar() {
@@ -13,15 +13,15 @@ export default function NavBar() {
   return (
     <header className="navbar">
       <div className="wrap">
-        <a className="brand" href="/">Biblioteca</a>
+        <Link className="brand" to="/">Biblioteca</Link>
 
         <div className="nav-center">
           <SearchBar onSelect={handleSelect} placeholder="Buscar por título o autor…" />
         </div>
 
         <nav className="links">
-          <a href="/">Inicio</a>
-          <a href="/reglamento">Reglamento</a>
+          <Link to="/">Inicio</Link>
+          <Link to="/reglamento">Reglamento</Link>
         </nav>
       </div>
     </header>

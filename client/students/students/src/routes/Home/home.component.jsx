@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchHome } from '../../services/api';
 import BookCard from '../../components/BookCard/book-card.component';
-
+import { Link } from 'react-router';
 
 export default function Home() {
   const [cats, setCats] = useState([]);
@@ -31,9 +31,9 @@ export default function Home() {
       <section className="cats-carousel">
         <h2>Categorías</h2>
         <div className="chips">
-          {cats.map(c => (
-            <a key={c.id} className="chip" href={`/categoria/${c.id}`}>{c.name}</a>
-          ))}
+         {cats.map(c => (
+          <Link key={c.id} className="chip" to={`/categoria/${c.id}`}>{c.name}</Link>
+        ))}
         </div>
       </section>
 

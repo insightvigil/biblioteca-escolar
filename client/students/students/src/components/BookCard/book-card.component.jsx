@@ -1,6 +1,8 @@
+import { Link } from 'react-router';
+
 export default function BookCard({ book }) {
   return (
-    <a className="book-card" href={`/libro/${book.id}`}>
+    <Link className="book-card" to={`/libro/${book.id}`}>
       {book.cover_url ? (
         <img src={book.cover_url} alt={book.title} />
       ) : (
@@ -13,6 +15,6 @@ export default function BookCard({ book }) {
           {book.available ? 'Disponible' : 'Agotado'}
         </p>
       </div>
-    </a>
+    </Link>
   );
 }
