@@ -9,6 +9,10 @@ export default function BookDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const available = typeof book?.available === 'boolean'
+   ? book.available
+   : (Number(book?.stock) > 0);
+
   useEffect(() => {
     let mounted = true;
     setLoading(true);
@@ -37,7 +41,7 @@ export default function BookDetail() {
         {book.author && <p className="muted">por {book.author}</p>}
         {book.category_name && <p className="chip">Categoría: {book.category_name}</p>}
         {book.editorial && <p>Editorial: {book.editorial}</p>}
-        <p>Disponibilidad: {book.available ? 'Disponible' : 'Agotado'}</p>
+        <p>Disponibilidad: {available ? 'Disponible' : 'Agotado'}</p>
         <p>Ubicación: Estante {book.estante ?? '-'} • Nivel {book.nivel ?? '-'}</p>
         <p>Páginas: {book.paginas ?? '-'}</p>
         <p>Idioma: {book.idioma ?? '-'}</p>

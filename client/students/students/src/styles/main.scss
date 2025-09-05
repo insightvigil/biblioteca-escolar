@@ -21,3 +21,7 @@
 .chip { display:inline-block; padding:.4rem .7rem; border-radius:999px; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:1rem; }
 .pager { margin:1rem 0; display:flex; gap:.75rem; align-items:center; justify-content:center; }
+
+.skeleton { background: linear-gradient(90deg, #eee 25%, #f7f7f7 37%, #eee 63%); background-size: 400% 100%; animation: sk 1.2s ease-in-out infinite; }
+@keyframes sk { 0% { background-position: 100% 0 } 100% { background-position: 0 0 } }
+.error-state { padding:1rem; border:1px solid #ffd4d4; background:#fff4f4; color:#b00020; border-radius:.5rem; }
