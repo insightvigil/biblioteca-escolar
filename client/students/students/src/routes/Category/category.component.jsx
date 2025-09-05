@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { fetchCategoryById, fetchBooksByCategory } from '../../services/api';
 import BookCard from '../../components/BookCard/book-card.component';
@@ -10,29 +10,25 @@ export default function Category() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pageSize, setPageSize] = useState(20);
+  const [available, setAvailable] = useState(undefined); // true | false | undefined
+  const [sort, setSort] = useState('title');             // 'title'|'created_at'|'author'
+  const [order, setOrder] = useState('asc');             // 'asc'|'desc'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // filtros básicos opcionales
-  const [available, setAvailable] = useState(undefined); // true | false | undefined
-  const [sort, setSort] = useState('title');             // 'title' | 'created_at' | 'author'
-  const [order, setOrder] = useState('asc');             // 'asc' | 'desc'
 
-  const pages = useMemo(
-    () => Math.max(1, Math.ceil(total / pageSize)),
-    [total, pageSize]
-  );
+  const pages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
 
-  // Cargar meta de categoría una vez (o cuando cambie id)
+  // Cargar meta de la categoría
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    setError(null);
     (async () => {
       try {
+        setLoading(true);
+        setError(null);
         const c = await fetchCategoryById(id);
         if (!alive) return;
         setCat(c);
-      } catch (e) {
+      } catch {
         if (!alive) return;
         setError('No se pudo cargar la categoría.');
       } finally {
@@ -42,18 +38,18 @@ export default function Category() {
     return () => { alive = false; };
   }, [id]);
 
-  // Cargar lista paginada cuando id/página/filtros cambian
+  // Cargar libros (paginado + filtros)
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    setError(null);
     (async () => {
       try {
+        setLoading(true);
+        setError(null);
         const data = await fetchBooksByCategory(id, { page, limit: pageSize, available, sort, order });
         if (!alive) return;
         setItems(data.items ?? []);
         setTotal(data.total ?? 0);
-      } catch (e) {
+      } catch {
         if (!alive) return;
         setError('No se pudo cargar la lista de libros.');
       } finally {
@@ -71,8 +67,6 @@ export default function Category() {
       <header className="head">
         <h1>{cat?.name ?? 'Categoría'}</h1>
         {cat?.description && <p className="muted">{cat.description}</p>}
-
-        {/* Filtros rápidos (opcionales) */}
         <div className="filters">
           <label>
             Disponibilidad:
@@ -88,7 +82,7 @@ export default function Category() {
           </label>
           <label>
             Ordenar por:
-            <select value={sort} onChange={(e)=>{ setPage(1); setSort(e.target.value); }}>
+            <select value={sort} onChange={(e) => { setPage(1); setSort(e.target.value); }}>
               <option value="title">Título</option>
               <option value="author">Autor</option>
               <option value="created_at">Recientes</option>
@@ -96,9 +90,17 @@ export default function Category() {
           </label>
           <label>
             Orden:
-            <select value={order} onChange={(e)=>{ setPage(1); setOrder(e.target.value); }}>
+            <select value={order} onChange={(e) => { setPage(1); setOrder(e.target.value); }}>
               <option value="asc">Asc</option>
               <option value="desc">Desc</option>
+            </select>
+          </label>
+          <label>
+            Por página:
+            <select value={pageSize} onChange={(e) => { setPage(1); setPageSize(Number(e.target.value)); }}>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={32}>32</option>
             </select>
           </label>
         </div>
@@ -106,6 +108,7 @@ export default function Category() {
 
       <div className="grid">
         {items.map(b => <BookCard key={b.id} book={b} />)}
+        {items.length === 0 && <p className="muted">Sin resultados.</p>}
       </div>
 
       <div className="pager">

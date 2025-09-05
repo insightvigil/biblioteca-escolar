@@ -8,7 +8,7 @@ export default function SearchBar({ onSelect, placeholder = 'Buscar…', minChar
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const timer = useRef(null);
-  const listRef = useRef(null);
+  const wrapRef = useRef(null);
   const navigate = useNavigate();
 
   const close = useCallback(() => {
@@ -19,7 +19,9 @@ export default function SearchBar({ onSelect, placeholder = 'Buscar…', minChar
   useEffect(() => {
     clearTimeout(timer.current);
     if (q.trim().length < minChars) {
-      setSuggestions([]); setOpen(false); return;
+      setSuggestions([]);
+      setOpen(false);
+      return;
     }
     timer.current = setTimeout(async () => {
       try {
@@ -28,7 +30,8 @@ export default function SearchBar({ onSelect, placeholder = 'Buscar…', minChar
         setOpen(true);
         setActive(-1);
       } catch {
-        setSuggestions([]); setOpen(false);
+        setSuggestions([]);
+        setOpen(false);
       }
     }, 250);
     return () => clearTimeout(timer.current);
@@ -42,32 +45,43 @@ export default function SearchBar({ onSelect, placeholder = 'Buscar…', minChar
   }
 
   function onKeyDown(e) {
+    if ((e.key === 'Enter') && (!open || suggestions.length === 0 || active < 0)) {
+      // Enter sin selección → página de resultados
+      if (q.trim()) {
+        e.preventDefault();
+        close();
+        navigate(`/search?q=${encodeURIComponent(q.trim())}`);
+      }
+      return;
+    }
     if (!open || !suggestions.length) return;
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((i) => (i + 1) % suggestions.length);
+      setActive(i => (i + 1) % suggestions.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActive((i) => (i - 1 + suggestions.length) % suggestions.length);
+      setActive(i => (i - 1 + suggestions.length) % suggestions.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (active >= 0) handleSelect(suggestions[active]);
-      else if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`);
-      close();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       close();
     }
   }
 
+  // Cierra cuando el foco sale del contenedor
+  function onBlur(e) {
+    if (!wrapRef.current?.contains(e.relatedTarget)) close();
+  }
+
   return (
-    <div className="search-bar" onBlur={(e) => {
-      if (!e.currentTarget.contains(e.relatedTarget)) close();
-    }}>
+    <div className="search-bar" ref={wrapRef} onBlur={onBlur}>
       <input
         type="search"
         value={q}
-        onChange={(e)=>setQ(e.target.value)}
+        onChange={(e) => setQ(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         aria-autocomplete="list"
@@ -75,16 +89,16 @@ export default function SearchBar({ onSelect, placeholder = 'Buscar…', minChar
         aria-controls="sb-listbox"
       />
       {open && suggestions.length > 0 && (
-        <ul id="sb-listbox" className="suggestions" role="listbox" ref={listRef}>
+        <ul id="sb-listbox" className="suggestions" role="listbox">
           {suggestions.map((s, idx) => (
             <li key={s.id}>
               <Link
                 to={`/libro/${s.id}`}
                 className={idx === active ? 'active' : undefined}
-                onMouseEnter={() => setActive(idx)}
-                onClick={(e) => handleSelect(s, e)}
                 role="option"
                 aria-selected={idx === active}
+                onMouseEnter={() => setActive(idx)}
+                onClick={(e) => handleSelect(s, e)}
               >
                 <span className="title">{s.title}</span>
                 {s.author && <span className="author"> — {s.author}</span>}

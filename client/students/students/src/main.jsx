@@ -8,6 +8,7 @@ import BookDetail from './routes/BookDetail/book-detail.component.jsx'
 import Regulation from './routes/Regulation/regulation.component.jsx'
 import NotFound from './routes/NotFound/not-found.component.jsx'
 import './index.css'
+import './styles/main.scss'
 
 const router = createBrowserRouter([
   {

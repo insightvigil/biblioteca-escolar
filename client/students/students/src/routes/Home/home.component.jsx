@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { fetchHome } from '../../services/api';
 import BookCard from '../../components/BookCard/book-card.component';
-import { Link } from 'react-router';
 
 export default function Home() {
   const [cats, setCats] = useState([]);
@@ -13,12 +13,18 @@ export default function Home() {
     let mounted = true;
     (async () => {
       try {
+        setLoading(true);
+        setError(null);
         const data = await fetchHome({ catLimit: 10, bookLimit: 16 });
         if (!mounted) return;
         setCats(data.featuredCategories ?? []);
         setBooks(data.latestBooks ?? []);
-      } catch (e) { setError(e.message || 'Error al cargar Home'); }
-      finally { setLoading(false); }
+      } catch (e) {
+        if (!mounted) return;
+        setError('No se pudo cargar el inicio.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
     })();
     return () => { mounted = false; };
   }, []);
@@ -28,12 +34,13 @@ export default function Home() {
 
   return (
     <div className="home">
-      <section className="cats-carousel">
-        <h2>Categorías</h2>
+      <section className="cats">
+        <h2>Categorías destacadas</h2>
         <div className="chips">
-         {cats.map(c => (
-          <Link key={c.id} className="chip" to={`/categoria/${c.id}`}>{c.name}</Link>
-        ))}
+          {cats.map(c => (
+            <Link key={c.id} className="chip" to={`/categoria/${c.id}`}>{c.name}</Link>
+          ))}
+          {cats.length === 0 && <p className="muted">Aún no hay categorías.</p>}
         </div>
       </section>
 
@@ -41,6 +48,7 @@ export default function Home() {
         <h2>Libros recientes</h2>
         <div className="grid">
           {books.map(b => <BookCard key={b.id} book={b} />)}
+          {books.length === 0 && <p className="muted">Aún no hay libros.</p>}
         </div>
       </section>
     </div>

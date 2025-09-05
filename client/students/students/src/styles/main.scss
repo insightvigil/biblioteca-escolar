@@ -1,0 +1,23 @@
+@import './_reset.scss';
+@import './variables.scss';
+@import './mixins.scss';
+
+/* Rutas */
+@import '../routes/Home/home.styles.scss';
+@import '../routes/Category/category.styles.scss';
+@import '../routes/BookDetail/book-detail.styles.scss';
+@import '../routes/Regulation/regulation.styles.scss';
+@import '../routes/NotFound/not-found.styles.scss';
+
+/* Componentes */
+@import '../components/BookCard/_book-card.styles.scss';
+@import '../components/CategorySection/category-section.styles.scss';
+
+/* Utilidades rápidas (opcionales) */
+.state { padding: 1rem; }
+.state.error { color: #b00020; }
+.muted { opacity: .75; }
+.chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+.chip { display:inline-block; padding:.4rem .7rem; border-radius:999px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:1rem; }
+.pager { margin:1rem 0; display:flex; gap:.75rem; align-items:center; justify-content:center; }
