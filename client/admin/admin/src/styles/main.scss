@@ -1,0 +1,21 @@
+:root { --gap: 12px; }
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; font-family: system-ui, sans-serif; color: #0f172a; }
+
+.app-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100%; }
+
+.sidebar { padding: 16px; border-right: 1px solid #e5e7eb; background: #f8fafc; }
+.brand { font-weight: 700; margin-bottom: 12px; }
+
+.header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; background: #ffffff; }
+.content { padding: 16px; }
+
+.nav a {
+  display:block; padding:8px 10px; border-radius:10px; text-decoration:none; color:#0f172a;
+}
+.nav a:hover { background:#e2e8f0; }
+.nav a.active { background:#0ea5e9; color:#fff; }
+
+h1, h2 { margin: 0 0 12px; }
