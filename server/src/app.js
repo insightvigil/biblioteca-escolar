@@ -15,7 +15,18 @@ import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
 
 const app = express();
-app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+const origins = process.env.CORS_ORIGIN.split(",")
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // permitir llamadas sin Origin (ej: curl, Postman)
+    if (!origin) return cb(null, true)
+    if (origins.includes(origin)) return cb(null, true)
+    return cb(new Error("Not allowed by CORS"))
+  },
+  credentials: true,
+}))
+
 app.use(express.json());
 
 app.get("/api/v1/health", async (_req, res) => {
