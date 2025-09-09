@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchBooks } from '../services/api.js'
+import { searchBooks } from '../services/api.js'
 
 export default function Dashboard() {
   const [status, setStatus] = useState('idle')
@@ -11,7 +11,7 @@ export default function Dashboard() {
     ;(async () => {
       setStatus('loading')
       try {
-        const items = await fetchBooks({ limit: 1 })
+        const { items } = await searchBooks({ limit: 1 })
         if (!alive) return
         setCount(Array.isArray(items) ? items.length : 0)
         setStatus('success')

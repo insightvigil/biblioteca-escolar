@@ -3,7 +3,6 @@ import '../styles/main.scss'
 
 export default function AppLayout() {
   const { pathname } = useLocation()
-
   const isActive = (to) => (pathname === to || pathname.startsWith(to + '/'))
 
   return (
