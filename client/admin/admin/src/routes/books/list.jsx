@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { fetchBooks, fetchCategories, deleteBook } from '../../services/api.js'
 import Pagination from '../../components/ui/Pagination.jsx'
 import ConfirmDialog from '../../components/ui/ConfirmDialog.jsx'
+import Button from '../../components/ui/Button.jsx'
 
 const useQuery = () => new URLSearchParams(useLocation().search)
 
@@ -22,13 +23,14 @@ export default function BooksList() {
     page: Number(q.get('page') || 1),
     limit: Number(q.get('limit') || 20),
   })
-  const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState('idle') // idle | loading | ready | error
   const [error, setError] = useState('')
   const [toDelete, setToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const syncURL = (f) => {
     const usp = new URLSearchParams()
-    Object.entries(f).forEach(([k,v]) => {
+    Object.entries(f).forEach(([k, v]) => {
       if (v !== '' && v !== undefined && v !== null) usp.set(k, v)
     })
     nav({ search: usp.toString() }, { replace: true })
@@ -41,28 +43,36 @@ export default function BooksList() {
         const cats = await fetchCategories()
         if (!alive) return
         setCategories(cats)
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     })()
-    return () => { alive = false }
+    return () => {
+      alive = false
+    }
   }, [])
 
   useEffect(() => {
     let alive = true
     ;(async () => {
-      setLoading(true); setError('')
+      setStatus('loading')
+      setError('')
       try {
         const { items, total, page, pageSize } = await fetchBooks(filters)
         if (!alive) return
         setItems(items)
         setMeta({ total, page, pageSize })
+        setStatus('ready')
       } catch (e) {
+        if (!alive) return
         setError(e.message || 'Error al cargar libros')
-      } finally {
-        if (alive) setLoading(false)
+        setStatus('error')
       }
     })()
     syncURL(filters)
-    return () => { alive = false }
+    return () => {
+      alive = false
+    }
   }, [filters])
 
   const onPageChange = (page) => setFilters((f) => ({ ...f, page }))
@@ -82,27 +92,49 @@ export default function BooksList() {
     setFilters(next)
   }
 
-  const confirmDelete = async (id) => {
+  const handleConfirmDelete = async (book) => {
+    setDeleting(true)
     try {
-      await deleteBook(id)
+      await deleteBook(book.id)
       setToDelete(null)
-      // refresh
-      setFilters((f) => ({ ...f }))
+      setItems((prev) => prev.filter((x) => x.id !== book.id))
     } catch (e) {
-      alert(e.message || 'No se pudo eliminar')
+      alert(e.message || 'No se pudo eliminar el libro')
+    } finally {
+      setDeleting(false)
     }
   }
+
+  if (status === 'loading') return <p>Cargando…</p>
+  if (status === 'error') return <p style={{ color: '#b91c1c' }}>❌ {error}</p>
 
   return (
     <div>
       <h2>Libros</h2>
 
-      <form onSubmit={applyFilters} style={{display:'grid', gap:8, marginBottom:12}}>
-        <div style={{display:'grid', gap:8, gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr'}}>
-          <input name="q" placeholder="Buscar por título/autor" defaultValue={filters.q} />
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 12,
+        }}
+      >
+        <form onSubmit={applyFilters} style={{ display: 'flex', gap: 8 }}>
+          <input
+            name="q"
+            placeholder="Buscar por título/autor"
+            defaultValue={filters.q}
+            style={{ width: 250 }}
+          />
           <select name="category_id" defaultValue={filters.category_id}>
             <option value="">Todas las categorías</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
           <select name="available" defaultValue={filters.available}>
             <option value="">Todos</option>
@@ -118,43 +150,68 @@ export default function BooksList() {
             <option value="desc">Desc</option>
             <option value="asc">Asc</option>
           </select>
-          <button type="submit">Aplicar</button>
-        </div>
-      </form>
-
-      <div style={{marginBottom:12}}>
+          <Button type="submit">Aplicar</Button>
+        </form>
         <Link to="/books/new">+ Nuevo libro</Link>
       </div>
 
-      {loading ? <p>Cargando…</p> : error ? <p style={{color:'#b91c1c'}}>❌ {error}</p> : (
-        items.length === 0 ? <p>No hay libros.</p> : (
-          <ul>
-            {items.map(b => (
-              <li key={b.id} style={{display:'flex', alignItems:'center', gap:8}}>
-                <strong>{b.title}</strong>{b.author ? ` — ${b.author}` : ''}
-                {b.available === true ? <span style={{marginLeft:8}}>✅</span> : <span style={{marginLeft:8}}>⛔</span>}
-                <span style={{marginLeft:'auto'}} />
-                <Link to={`/books/${b.id}/edit`}>Editar</Link>
-                <button onClick={()=>setToDelete(b.id)}>Eliminar</button>
-              </li>
-            ))}
-          </ul>
-        )
-      )}
+      {items.length === 0 ? (
+        <p>No hay libros.</p>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tbl" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Título</th>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Autor</th>
+                  <th style={{ textAlign: 'center', padding: '8px' }}>Categoría</th>
+                  <th style={{ textAlign: 'center', padding: '8px' }}>Disponible</th>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((b) => (
+                  <tr key={b.id} style={{ borderTop: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '8px', fontWeight: 'bold' }}>{b.title}</td>
+                    <td style={{ padding: '8px' }}>{b.author || '—'}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      {b.category ? b.category.name : '—'}
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      {b.available ? '✅' : '⛔'}
+                    </td>
+                    <td style={{ padding: '8px', display: 'flex', gap: 8 }}>
+                      <Link to={`/books/${b.id}/edit`}>Editar</Link>
+                      <button type="button" onClick={() => setToDelete(b)}>
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      <Pagination
-        page={meta.page}
-        pageSize={meta.pageSize}
-        total={meta.total}
-        onPageChange={onPageChange}
-      />
+          <Pagination
+            page={meta.page}
+            pageSize={meta.pageSize}
+            total={meta.total}
+            onPageChange={onPageChange}
+          />
+        </>
+      )}
 
       <ConfirmDialog
         open={!!toDelete}
         title="Eliminar libro"
-        message="Esta acción no se puede deshacer. ¿Deseas continuar?"
-        onCancel={()=>setToDelete(null)}
-        onConfirm={()=>confirmDelete(toDelete)}
+        message={
+          `Esta acción no se puede deshacer. ¿Deseas eliminar “${toDelete?.title}` +
+          `” de ${toDelete?.author || '—'}?`
+        }
+        onCancel={() => setToDelete(null)}
+        onConfirm={() => toDelete && handleConfirmDelete(toDelete)}
+        confirmDisabled={deleting}
       />
     </div>
   )
