@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router'
 import { fetchBooks, fetchCategories, deleteBook } from '../../services/api.js'
 import Pagination from '../../components/ui/Pagination.jsx'
 import ConfirmDialog from '../../components/ui/ConfirmDialog.jsx'
@@ -27,6 +27,22 @@ export default function BooksList() {
   const [error, setError] = useState('')
   const [toDelete, setToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Mapa id -> nombre para resolver categorías aunque no venga el objeto 'category'
+  const categoriesMap = useMemo(() => {
+    const map = new Map()
+    for (const c of categories) map.set(Number(c.id), c.name)
+    return map
+  }, [categories])
+
+  const catName = (book) => {
+    // Prioridad: nombre ya poblado → buscar por id → guion
+    return (
+      book?.category?.name ||
+      categoriesMap.get(Number(book?.category_id ?? book?.categoryId)) ||
+      '—'
+    )
+  }
 
   const syncURL = (f) => {
     const usp = new URLSearchParams()
@@ -176,7 +192,7 @@ export default function BooksList() {
                     <td style={{ padding: '8px', fontWeight: 'bold' }}>{b.title}</td>
                     <td style={{ padding: '8px' }}>{b.author || '—'}</td>
                     <td style={{ padding: '8px', textAlign: 'center' }}>
-                      {b.category ? b.category.name : '—'}
+                      {catName(b)}
                     </td>
                     <td style={{ padding: '8px', textAlign: 'center' }}>
                       {b.available ? '✅' : '⛔'}
