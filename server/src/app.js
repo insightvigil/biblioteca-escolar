@@ -14,6 +14,8 @@ import adminCategoriesRouter from "./routes/admin.categories.routes.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
 
+import adminLoansRouter from "./routes/admin.loans.routes.js";
+
 const app = express();
 const origins = process.env.CORS_ORIGIN.split(",")
 
@@ -48,6 +50,9 @@ app.use("/api/v1/books", booksRouter);
 // Admin v1
 app.use("/api/v1/admin/categories", adminCategoriesRouter);
 app.use("/api/v1/admin/books", adminBooksRouter);
+
+//Nuevo
+app.use("/api/v1/admin/loans", adminLoansRouter);
 
 app.use(notFound);
 app.use(errorHandler);
