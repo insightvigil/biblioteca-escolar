@@ -1,6 +1,7 @@
 // routes/loans/new.jsx
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router';
+
 import { useForm } from 'react-hook-form';
 import { createLoan } from '../../services/loans.js';
 import LoanForm from './LoanForm.jsx'; // <- Se importa el nuevo componente

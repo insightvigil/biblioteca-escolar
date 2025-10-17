@@ -126,3 +126,40 @@ export async function returnLoan(id, body = {}) {
   const r = await api.post(`/admin/loans/${id}/return`, body)
   return r.data ?? null
 }
+
+/* =========================
+   NUEVO: Exportar CSV
+   ========================= */
+const _getFilenameFromDisposition = (header = '') => {
+  // Ejemplo: attachment; filename="prestamos_2025-10-17-12-10-05.csv"
+  const m = /filename\*?=(?:UTF-8'')?"?([^\";]+)"?/i.exec(header)
+  if (m && m[1]) return decodeURIComponent(m[1])
+  return `prestamos_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`
+}
+
+/**
+ * Descarga un CSV con los préstamos aplicando los mismos filtros del listado.
+ * @param {Object} params - filtros: { estado, role, num_control, isbn, from, to }
+ * @returns {Promise<void>} Dispara la descarga en el navegador.
+ */
+export async function exportLoansCsv(params = {}) {
+  const resp = await api.get('/admin/loans/export.csv', {
+    params: clean(params),
+    responseType: 'blob',
+  })
+
+  const blob = new Blob([resp.data], { type: 'text/csv;charset=utf-8;' })
+  const url = window.URL.createObjectURL(blob)
+
+  const filename =
+    _getFilenameFromDisposition(resp.headers?.['content-disposition']) ||
+    'prestamos.csv'
+
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
+}

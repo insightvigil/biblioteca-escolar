@@ -1,7 +1,7 @@
 // routes/loans/list.jsx
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { fetchLoans, fetchLoanAggregates } from '../../services/loans.js'
+import { Link, useNavigate, useLocation } from 'react-router'
+import { fetchLoans, fetchLoanAggregates, exportLoansCsv } from '../../services/loans.js'
 import Pagination from '../../components/ui/Pagination.jsx'
 import Button from '../../components/ui/Button.jsx'
 
@@ -18,7 +18,7 @@ const cleanParams = (f) => {
   const q = Object.fromEntries(
     Object.entries(f).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
   )
-  // La API usa loan_state en lugar de estado
+  // La API usa loan_state en lugar de estado (tu UI ya venía así)
   if (q.estado) { q.loan_state = q.estado; delete q.estado }
   return q
 }
@@ -125,6 +125,19 @@ export default function LoansList() {
     setFilters(next)
   }
 
+  const onExportCsv = async () => {
+    // Para exportar TODO, evita paginación y solo envía filtros de negocio
+    const { num_control, isbn, estado, role, from, to } = filters
+    await exportLoansCsv({
+      num_control: num_control || undefined,
+      isbn: isbn || undefined,
+      estado: estado || undefined, // el server acepta `estado`; el service ya limpia null/''.
+      role: role || undefined,
+      from: from || undefined,
+      to: to || undefined,
+    })
+  }
+
   if (status === 'loading') return <p>Cargando…</p>
   if (status === 'error') return <p style={{ color: '#b91c1c' }}>❌ {error}</p>
 
@@ -139,10 +152,17 @@ export default function LoansList() {
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 12,
+          gap: 8,
+          flexWrap: 'wrap'
         }}
       >
         <h2>Bitácora de préstamos</h2>
-        <Link to="/loans/new">+ Nuevo préstamo</Link>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button onClick={onExportCsv}>Exportar CSV</Button>
+          <Link to="/loans/new">
+            <Button>+ Nuevo préstamo</Button>
+          </Link>
+        </div>
       </div>
 
       <form onSubmit={applyFilters} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>

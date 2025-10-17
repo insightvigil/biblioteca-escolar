@@ -108,18 +108,25 @@ export async function getById(id){
   return mapLoanRow(r.rows[0]);
 }
 
-export async function findLoans({
-  page = 1,
-  limit = 20,
-  estado,
-  role,
-  num_control,
-  isbn,
-  from,
-  to,
-  periodTerm,
-  periodYear,
-}) {
+/**
+ * Listado de préstamos con filtros.
+ * - Si NO se pasan explícitamente `page`/`limit` en el objeto de filtros -> SIN paginación (útil para export).
+ * - Si se pasan -> con paginación (comportamiento previo).
+ */
+export async function findLoans(filters = {}) {
+  const {
+    page,
+    limit,
+    estado,
+    role,
+    num_control,
+    isbn,
+    from,
+    to,
+    periodTerm,   // reservado por si lo usas luego
+    periodYear,   // reservado por si lo usas luego
+  } = filters;
+
   const where = [];
   const params = [];
   let i = 1;
@@ -135,17 +142,20 @@ export async function findLoans({
       OR regexp_replace(UPPER(COALESCE(b.isbn10, '')), '[^0-9X]', '', 'g') = regexp_replace(UPPER($${i}), '[^0-9X]', '', 'g')
       OR regexp_replace(UPPER(COALESCE(b.isbn13, '')), '[^0-9X]', '', 'g') = regexp_replace(UPPER($${i}), '[^0-9X]', '', 'g')
     )`);
-    params.push(isbn);
-    i++;
+    params.push(isbn); i++;
   }
 
   if (from) { where.push(`l.fecha_prestamo >= $${i++}`); params.push(from); }
-  if (to) { where.push(`l.fecha_prestamo < $${i++}`); params.push(to); }
+  if (to)   { where.push(`l.fecha_prestamo <  $${i++}`); params.push(to); }
 
-  const whereSql = where.length ? `WHERE ${' ' + where.join(' AND ')}` : '';
-  const offset = (Math.max(1, page) - 1) * Math.max(1, limit);
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  const q = `
+  // Detecta si page/limit vinieron explícitos en el objeto de filtros
+  const hasPage  = Object.prototype.hasOwnProperty.call(filters, 'page');
+  const hasLimit = Object.prototype.hasOwnProperty.call(filters, 'limit');
+  const paginate = hasPage || hasLimit;
+
+  let q = `
     SELECT
       l.*,
       b.title AS book_title_join,
@@ -155,8 +165,14 @@ export async function findLoans({
     LEFT JOIN books b ON b.id = l.book_id
     ${whereSql}
     ORDER BY l.fecha_prestamo DESC, l.loan_id DESC
-    LIMIT ${Math.max(1, limit)} OFFSET ${Math.max(0, offset)}
   `;
+
+  if (paginate) {
+    const pageNum  = Number(page)  > 0 ? Number(page)  : 1;
+    const limitNum = Number(limit) > 0 ? Number(limit) : 20;
+    const offset   = (pageNum - 1) * limitNum;
+    q += ` LIMIT ${limitNum} OFFSET ${offset}`;
+  }
 
   const r = await pool.query(q, params);
   return r.rows.map(mapLoanRow);
@@ -228,7 +244,7 @@ export async function getAggregates({ from, to }) {
   let i = 1;
 
   if (from) { where.push(`fecha_prestamo >= $${i++}`); params.push(from); }
-  if (to) { where.push(`fecha_prestamo < $${i++}`); params.push(to); }
+  if (to)   { where.push(`fecha_prestamo <  $${i++}`); params.push(to); }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -248,4 +264,54 @@ export async function getAggregates({ from, to }) {
     total: 0, activos: 0, vencidos: 0, devueltos: 0,
     prestamos_alumnos: 0, prestamos_docentes: 0
   };
+}
+
+/**
+ * Paginado con total (para listados en Admin)
+ */
+export async function findLoansWithTotal({ page=1, limit=20, estado, role, num_control, isbn, from, to }) {
+  const where = [];
+  const params = [];
+  let i = 1;
+
+  if (estado) { where.push(`l.estado = $${i++}`); params.push(estado); }
+  if (role) { where.push(`l.role = $${i++}`); params.push(role); }
+  if (num_control) { where.push(`l.num_control = $${i++}`); params.push(num_control); }
+  if (isbn) {
+    where.push(`(
+      regexp_replace(UPPER(COALESCE(l.isbn10, '')), '[^0-9X]', '', 'g') = regexp_replace(UPPER($${i}), '[^0-9X]', '', 'g')
+      OR regexp_replace(UPPER(COALESCE(l.isbn13, '')), '[^0-9X]', '', 'g') = regexp_replace(UPPER($${i}), '[^0-9X]', '', 'g')
+      OR regexp_replace(UPPER(COALESCE(b.isbn10, '')), '[^0-9X]', '', 'g') = regexp_replace(UPPER($${i}), '[^0-9X]', '', 'g')
+      OR regexp_replace(UPPER(COALESCE(b.isbn13, '')), '[^0-9X]', '', 'g') = regexp_replace(UPPER($${i}), '[^0-9X]', '', 'g')
+    )`);
+    params.push(isbn); i++;
+  }
+  if (from) { where.push(`l.fecha_prestamo >= $${i++}`); params.push(from); }
+  if (to)   { where.push(`l.fecha_prestamo <  $${i++}`); params.push(to); }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const offset = (Math.max(1, page)-1) * Math.max(1, limit);
+
+  const q = `
+    WITH base AS (
+      SELECT
+        l.*,
+        (SELECT title  FROM books WHERE id = l.book_id)   AS book_title_join,
+        (SELECT isbn10 FROM books WHERE id = l.book_id)   AS isbn10_join,
+        (SELECT isbn13 FROM books WHERE id = l.book_id)   AS isbn13_join
+      FROM loans l
+      LEFT JOIN books b ON b.id = l.book_id
+      ${whereSql}
+    ),
+    counted AS (
+      SELECT *, COUNT(*) OVER() AS total_rows
+      FROM base
+      ORDER BY fecha_prestamo DESC
+      LIMIT ${Math.max(1, limit)} OFFSET ${offset}
+    )
+    SELECT * FROM counted;
+  `;
+  const { rows } = await pool.query(q, params);
+  const total = rows[0]?.total_rows ? Number(rows[0].total_rows) : 0;
+  return { rows, total };
 }
