@@ -4,39 +4,52 @@ import Input from '../../components/ui/Input.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { createCategory } from '../../services/api.js'
 
-export default function NewCategory() {
+export default function CategoryNew() {
   const nav = useNavigate()
   const { register, handleSubmit, formState: { isSubmitting } } = useForm()
 
-  const onSubmit = async (values) => {
-    await createCategory({
-      name: values.name?.trim(),
-      description: values.description?.trim() || null,
-    })
-    nav('/categories')
+  const onSubmit = async (data) => {
+    try {
+      await createCategory({
+        name: data.name?.trim(),
+        description: data.description?.trim() || null,
+      })
+      nav('/categories')
+    } catch (err) {
+      alert(err.message || 'No se pudo crear la categoría')
+    }
   }
 
   return (
     <div>
       <h2>Nueva categoría</h2>
-      <form className="frm" onSubmit={handleSubmit(onSubmit)}>
-        <Input label="Nombre" required {...register('name', { required: true })} />
+
+      <form className="frm grid gap-2" onSubmit={handleSubmit(onSubmit)}>
+        <Input
+          label="Nombre"
+          placeholder="Ej. Literatura"
+          required
+          {...register('name', { required: true })}
+        />
 
         <div className="frm-row">
-          <label className="frm-label" htmlFor="description">Descripción (opcional)</label>
+          <label className="frm-label" htmlFor="description">
+            Descripción (opcional)
+          </label><br/>
           <textarea
             id="description"
-            rows={4}
+            rows="5"
+            cols="150"
             placeholder="Breve descripción de la categoría"
             {...register('description')}
           />
         </div>
 
-        <div className="frm-actions">
+        <div className="frm-actions flex gap-2 mt-2">
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Guardando…' : 'Guardar'}
           </Button>
-          <Link to="/categories" style={{ marginLeft: 8 }}>Cancelar</Link>
+          <Link to="/categories">Cancelar</Link>
         </div>
       </form>
     </div>
