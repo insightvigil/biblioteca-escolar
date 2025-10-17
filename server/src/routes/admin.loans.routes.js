@@ -58,7 +58,12 @@ router.post("/:id/return", async (req, res, next) => {
   try {
     const loan = await getById(req.params.id);
     if (!loan) return res.status(404).json({ message: "Loan not found" });
-    const updated = await returnLoan({ loan, registrarPago: !!req.body.registrarPago, estado_devolucion: req.body.estado_devolucion, notas_condicion: req.body.notas_condicion });
+    const updated = await returnLoan({
+      loan,
+      registrarPago: !!req.body.registrarPago,
+      estado_devolucion: req.body.estado_devolucion,
+      notas_condicion: req.body.notas_condicion
+    });
     res.json(updated);
   } catch (e) { next(e); }
 });

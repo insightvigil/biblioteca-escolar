@@ -23,8 +23,6 @@ async function getBookById(id) {
 async function getBookByIsbn(isbnRaw) {
   const isbn = normalizeIsbn(isbnRaw);
   if (!isbn) return null;
-
-  // Usamos regexp_replace para comparar contra versión "limpia" en DB
   const q = `
     SELECT id, title AS book_title, isbn10, isbn13
     FROM books
@@ -36,56 +34,31 @@ async function getBookByIsbn(isbnRaw) {
   return r.rows[0] || null;
 }
 
-/**
- * Resuelve y devuelve el registro completo del libro.
- * Soporta: book.id | book.isbn | book_id | isbn (en nivel superior).
- */
+/** Resuelve y devuelve el registro completo del libro */
 async function resolveBookRecord({ book, book_id, isbn }) {
-  // Prioridad: id explícito
   const idIn = book?.id ?? book_id;
   if (idIn) {
-    const byId = await getBookById(idIn);
-    if (byId) return byId;
+    const b = await getBookById(idIn);
+    if (b) return b;
   }
-
-  // Fallback: ISBN
   const isbnIn = book?.isbn ?? isbn;
   if (isbnIn) {
-    const byIsbn = await getBookByIsbn(isbnIn);
-    if (byIsbn) return byIsbn;
+    const b = await getBookByIsbn(isbnIn);
+    if (b) return b;
   }
-
   const e = new Error("Debes enviar un ISBN válido (10/13) o un book_id existente");
   e.status = 400;
   throw e;
 }
 
-/**
- * Crea un préstamo resolviendo el libro y denormalizando título/ISBNs.
- * Acepta payload en nivel superior (new.jsx) o anidado (compat).
- *
- * payload:
- * {
- *   role: 'alumno' | 'docente',
- *   isbn?: string,
- *   book_id?: number,
- *   book?: { id?, isbn?, estado_salida?, notas_condicion? } // compat
- *   alumno?: { num_control, nombre_completo, carrera, sexo? }
- *   docente?: { nombre_completo, correo, sexo? }
- *   estado_salida?: 'bueno'|'regular'|'malo',
- *   notas_condicion?: string,
- *   staff?: { id?, nombre? },
- *   station?: { id?, nombre?, ip? }
- * }
- */
 export async function createLoan(payloadIn = {}) {
   const {
     role,
     alumno,
     docente,
-    book,                // compat
-    book_id,             // nuevo (nivel superior)
-    isbn,                // nuevo (nivel superior)
+    book,
+    book_id,
+    isbn,
     staff,
     station,
     estado_salida,
@@ -98,7 +71,6 @@ export async function createLoan(payloadIn = {}) {
     throw e;
   }
 
-  // 1) Validar datos de usuario por rol
   let nombre_completo, correo, num_control = null, carrera = null, sexo = null;
 
   if (role === "alumno") {
@@ -127,7 +99,6 @@ export async function createLoan(payloadIn = {}) {
     throw e;
   }
 
-  // 2) Resolver libro (acepta id/ISBN en nivel superior o en book.*)
   const bookRecord = await resolveBookRecord({ book, book_id, isbn });
   if (!bookRecord) {
     const e = new Error("Libro no encontrado");
@@ -135,13 +106,11 @@ export async function createLoan(payloadIn = {}) {
     throw e;
   }
 
-  // 3) Periodo + festivos para calcular fecha compromiso
   const period = await getCurrentPeriod();
   const holidays = period ? await getHolidays(period.period_id) : [];
   const startDate = new Date();
   const due = computeDueDate({ role, startDate, holidays });
 
-  // 4) Construir payload para insertar (con denormalización útil)
   const payload = {
     book_id: bookRecord.id,
     role,
@@ -154,26 +123,18 @@ export async function createLoan(payloadIn = {}) {
     station_id: station?.id ?? null,
     ip: station?.ip ?? null,
     fecha_prestamo: startDate,
-    // Guardamos YYYY-MM-DD (como ya hacías)
     fecha_compromiso: due ? new Date(due).toISOString().slice(0, 10) : null,
     estado: "activo",
-    // Condición propia de este préstamo (preferir nivel superior; fallback a book.* por compat)
     estado_salida: estado_salida ?? book?.estado_salida ?? null,
     notas_condicion: notas_condicion ?? book?.notas_condicion ?? null,
-    // Cache de libro para listados/reportes rápidos SIN JOIN
     book_title: bookRecord.book_title ?? null,
     isbn10: bookRecord.isbn10 ?? null,
     isbn13: bookRecord.isbn13 ?? null,
   };
 
-  // 5) Insertar
   const inserted = await insertLoan(payload);
-  // insertLoan puede devolver el registro completo o solo el id.
-  const loan_id = inserted?.loan_id ?? inserted?.id ?? inserted;
-
-  // 6) Devolver respuesta consistente
   return {
-    loan_id,
+    loan_id: inserted.loan_id,
     role,
     nombre_completo,
     num_control,

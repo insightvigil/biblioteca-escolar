@@ -12,6 +12,29 @@ const useQuery = () => new URLSearchParams(useLocation().search)
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'
 
+// --- Helpers de normalización ---
+/** Limpia filtros y mapea nombres al contrato de la API */
+const cleanParams = (f) => {
+  const q = Object.fromEntries(
+    Object.entries(f).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
+  )
+  // La API usa loan_state en lugar de estado
+  if (q.estado) { q.loan_state = q.estado; delete q.estado }
+  return q
+}
+
+/** Obtiene la clave de estado posible (por si algo llega distinto) */
+const getRowState = (row) => row?.estado ?? row?.loan_state ?? row?.status ?? row?.state ?? null
+
+/** Lee { estado, c } desde el agregado normalizado o hace fallback a items */
+const countByState = (agg, items, state) => {
+  const list = Array.isArray(agg?.byEstado) ? agg.byEstado : []
+  const hit = list.find(x => (x?.estado ?? x?.loan_state ?? x?.status ?? x?.state) === state)
+  if (hit && Number.isFinite(Number(hit.c))) return Number(hit.c)
+  // fallback: contar en el cliente
+  return items.reduce((acc, r) => acc + (getRowState(r) === state ? 1 : 0), 0)
+}
+
 export default function LoansList() {
   const nav = useNavigate()
   const q = useQuery()
@@ -48,23 +71,28 @@ export default function LoansList() {
       setStatus('loading')
       setError('')
       try {
+        const query = cleanParams(filters)
+
         const [data, summary] = await Promise.all([
-            fetchLoans(filters),
-            fetchLoanAggregates({ from: filters.from, to: filters.to })
+          fetchLoans(query),
+          fetchLoanAggregates({ from: query.from, to: query.to })
         ])
-        
+
         if (!alive) return
 
         const fetchedItems = Array.isArray(data) ? data : []
         setItems(fetchedItems)
-        setAgg(summary)
-        
+        setAgg(summary) // ya viene normalizado desde el service
+
+        const page = query.page ?? filters.page
+        const limit = query.limit ?? filters.limit
+
         const totalEstimado =
-          fetchedItems.length < filters.limit
-            ? (filters.page - 1) * filters.limit + fetchedItems.length
-            : filters.page * filters.limit + 1
-            
-        setMeta({ total: totalEstimado, page: filters.page, pageSize: filters.limit })
+          fetchedItems.length < limit
+            ? (page - 1) * limit + fetchedItems.length
+            : page * limit + 1
+
+        setMeta({ total: totalEstimado, page, pageSize: limit })
         setStatus('ready')
       } catch (e) {
         if (!alive) return
@@ -72,12 +100,11 @@ export default function LoansList() {
         setStatus('error')
       }
     })()
-    
+
+    // Mantén la URL sincronizada
     syncURL(filters)
 
-    return () => {
-      alive = false
-    }
+    return () => { alive = false }
   }, [filters])
 
   const onPageChange = (page) => setFilters((f) => ({ ...f, page }))
@@ -97,9 +124,12 @@ export default function LoansList() {
     }
     setFilters(next)
   }
-  
+
   if (status === 'loading') return <p>Cargando…</p>
   if (status === 'error') return <p style={{ color: '#b91c1c' }}>❌ {error}</p>
+
+  const activos  = countByState(agg, items, 'activo')
+  const vencidos = countByState(agg, items, 'vencido')
 
   return (
     <div>
@@ -136,22 +166,22 @@ export default function LoansList() {
         <input type="date" name="to" defaultValue={filters.to} style={{ width: 150 }}/>
         <Button type="submit">Aplicar</Button>
       </form>
-      
+
       <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ border: '1px solid #ddd', padding: '8px 16px', borderRadius: 8 }}>
-            <strong>Total:</strong> {agg?.total ?? 0}
+          <strong>Total:</strong> {agg?.total ?? meta.total ?? items.length ?? 0}
         </div>
         <div style={{ border: '1px solid #ddd', padding: '8px 16px', borderRadius: 8 }}>
-            <strong>Activos:</strong> {(agg?.byEstado || []).find(x => x.estado === 'activo')?.c || 0}
+          <strong>Activos:</strong> {activos}
         </div>
         <div style={{ border: '1px solid #ddd', padding: '8px 16px', borderRadius: 8 }}>
-            <strong>Vencidos:</strong> {(agg?.byEstado || []).find(x => x.estado === 'vencido')?.c || 0}
+          <strong>Vencidos:</strong> {vencidos}
         </div>
         <div style={{ border: '1px solid #ddd', padding: '8px 16px', borderRadius: 8 }}>
-            <strong>Recaudado:</strong> ${Number(agg?.fines?.recaudado || 0).toFixed(2)}
+          <strong>Recaudado:</strong> ${Number(agg?.fines?.recaudado || 0).toFixed(2)}
         </div>
         <div style={{ border: '1px solid #ddd', padding: '8px 16px', borderRadius: 8 }}>
-            <strong>Pendiente:</strong> ${Number(agg?.fines?.pendiente || 0).toFixed(2)}
+          <strong>Pendiente:</strong> ${Number(agg?.fines?.pendiente || 0).toFixed(2)}
         </div>
       </div>
 
@@ -168,7 +198,8 @@ export default function LoansList() {
                   <th style={{ textAlign: 'center', padding: '8px' }}>Nº control</th>
                   <th style={{ textAlign: 'left', padding: '8px' }}>Usuario</th>
                   <th style={{ textAlign: 'center', padding: '8px' }}>Rol</th>
-                  <th style={{ textAlign: 'left', padding: '8px' }}>Libro</th>
+                  <th style={{ textAlign: 'center', padding: '8px' }}>ID</th>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Nombre de libro</th>
                   <th style={{ textAlign: 'center', padding: '8px' }}>ISBN</th>
                   <th style={{ textAlign: 'center', padding: '8px' }}>Estado</th>
                   <th style={{ textAlign: 'left', padding: '8px' }}>Acciones</th>
@@ -177,31 +208,29 @@ export default function LoansList() {
               <tbody>
                 {items.map((row) => (
                   <tr key={row.loan_id} style={{ borderTop: '1px solid #e5e7eb' }}>
-                      <td style={{ padding: '8px' }}>{fmtDate(row.start_date)}</td>
-                      <td style={{ padding: '8px' }}>{fmtDate(row.due_date)}</td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>
-                          {row.num_control || '—'}
-                      </td>
-                      <td style={{ padding: '8px', fontWeight: 'bold' }}>
-                          {row.nombre_completo}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>{row.role}</td>
-                      <td style={{ padding: '8px' }}>
-                          {row.book_title 
-                          ? `${row.book_title} (ID: ${row.book_id})` 
-                          : `Libro ID: ${row.book_id}`
-                          }
-                      </td>
-                      {/* **CAMBIO CLAVE**: Leemos los ISBN directamente de la fila */}
-                      <td style={{ padding: '8px', textAlign: 'center', minWidth: '150px' }}>
-                          {`13: ${row.isbn13 || '—'}`}
-                          <br/>
-                          {`10: ${row.isbn10 || '—'}`}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>{row.estado}</td>
-                      <td style={{ padding: '8px' }}>
+                    <td style={{ padding: '8px' }}>{fmtDate(row.start_date)}</td>
+                    <td style={{ padding: '8px' }}>{fmtDate(row.due_date)}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      {row.num_control || '—'}
+                    </td>
+                    <td style={{ padding: '8px', fontWeight: 'bold' }}>
+                      {row.nombre_completo}
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>{row.role}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>{row.book_id}</td>
+                    <td style={{ padding: '8px' }}>
+                      {row.book_title || `Libro ID: ${row.book_id}`}
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center', minWidth: '150px' }}>
+                      {`13: ${row.isbn13 || '—'}`}<br/>
+                      {`10: ${row.isbn10 || '—'}`}
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      {getRowState(row) || '—'}
+                    </td>
+                    <td style={{ padding: '8px' }}>
                       <Link to={`/loans/${row.loan_id}`}>Detalle</Link>
-                      </td>
+                    </td>
                   </tr>
                 ))}
               </tbody>
