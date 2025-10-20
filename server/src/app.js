@@ -10,6 +10,7 @@ import regulationRouter from "./routes/regulation.routes.js";
 import searchRouter from "./routes/search.routes.js";
 import adminBooksRouter from "./routes/admin.books.routes.js";
 import adminCategoriesRouter from "./routes/admin.categories.routes.js";
+import settingsRouter from "./routes/settings.routes.js";
 
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
@@ -53,6 +54,8 @@ app.use("/api/v1/admin/books", adminBooksRouter);
 
 //Nuevo
 app.use("/api/v1/admin/loans", adminLoansRouter);
+
+app.use("/settings", settingsRouter);
 
 app.use(notFound);
 app.use(errorHandler);

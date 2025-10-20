@@ -12,6 +12,7 @@ import LoanNew from './loans/new.jsx'
 import LoanDetail from './loans/detail.jsx'
 import LoanReturn from './loans/return.jsx'
 import LoanReports from './loans/reports.jsx'
+import Settings from './settings/settings.jsx'
 
 const routes = [
   {
@@ -33,6 +34,7 @@ const routes = [
       { path: '*', element: <NotFound /> },
       { path: 'categories/new', element: <NewCategory /> },
       { path: 'categories/:id/edit', element: <EditCategory /> },
+      { path: 'settings', element: <Settings /> },
     ],
   },
 ]

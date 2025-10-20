@@ -16,7 +16,7 @@ export default function AppLayout() {
           <NavLink to="/books" className={isActive('/books') ? 'active' : ''}>Libros</NavLink>
           <NavLink to="/categories" className={isActive('/categories') ? 'active' : ''}>Categorías</NavLink>
           <NavLink to="/loans" className={isActive('/loans') ? 'active' : ''}>Préstamos</NavLink>
-          
+          <NavLink to="/settings" className={isActive('/settings') ? 'active' : ''}>Ajustes</NavLink>
         </nav>
       </aside>
 
