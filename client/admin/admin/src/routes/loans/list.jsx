@@ -218,6 +218,7 @@ export default function LoansList() {
                   <th style={{ textAlign: 'center', padding: '8px' }}>Nº control</th>
                   <th style={{ textAlign: 'left', padding: '8px' }}>Usuario</th>
                   <th style={{ textAlign: 'center', padding: '8px' }}>Rol</th>
+                  <th style={{ textAlign: 'center', padding: '8px' }}>Sexo</th>
                   <th style={{ textAlign: 'center', padding: '8px' }}>ID</th>
                   <th style={{ textAlign: 'left', padding: '8px' }}>Nombre de libro</th>
                   <th style={{ textAlign: 'center', padding: '8px' }}>ISBN</th>
@@ -237,6 +238,9 @@ export default function LoansList() {
                       {row.nombre_completo}
                     </td>
                     <td style={{ padding: '8px', textAlign: 'center' }}>{row.role}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
++                      {row.sexo || '—'}
++                    </td>
                     <td style={{ padding: '8px', textAlign: 'center' }}>{row.book_id}</td>
                     <td style={{ padding: '8px' }}>
                       {row.book_title || `Libro ID: ${row.book_id}`}

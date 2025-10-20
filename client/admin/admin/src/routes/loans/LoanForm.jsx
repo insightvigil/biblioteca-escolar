@@ -58,6 +58,16 @@ export default function LoanForm({
             {...register('nombre_completo_alumno', { required: 'El nombre es obligatorio' })}
             error={errors?.nombre_completo_alumno?.message}
           />
+          <Select
+            label="Sexo"
+            required
+           {...register('sexo_alumno', { required: 'El sexo es obligatorio' })}
+           error={errors?.sexo_alumno?.message}
+         >
+            <option value="">Seleccionar…</option>
+            <option value="H">Hombre</option>
+            <option value="M">Mujer</option>
+          </Select>
           <div style={{ gridColumn: '1 / -1' }}>
             <Input
               label="Carrera"
@@ -85,6 +95,14 @@ export default function LoanForm({
             })}
             error={errors?.correo?.message}
           />
+          <Select
+            label="Sexo"
+            {...register('sexo_docente')}
+          >
+           <option value="">Sin especificar</option>
+           <option value="H">Hombre</option>
+           <option value="M">Mujer</option>
+         </Select>
         </div>
       )}
 

@@ -255,15 +255,19 @@ export async function getAggregates({ from, to }) {
       SUM(CASE WHEN estado = 'vencido'  THEN 1 ELSE 0 END)::int AS vencidos,
       SUM(CASE WHEN estado = 'devuelto' THEN 1 ELSE 0 END)::int AS devueltos,
       SUM(CASE WHEN role = 'alumno' THEN 1 ELSE 0 END)::int AS prestamos_alumnos,
-      SUM(CASE WHEN role = 'docente' THEN 1 ELSE 0 END)::int AS prestamos_docentes
+      SUM(CASE WHEN role = 'docente' THEN 1 ELSE 0 END)::int AS prestamos_docentes,
++     SUM(CASE WHEN sexo = 'H' THEN 1 ELSE 0 END)::int AS prestamos_hombres,
++     SUM(CASE WHEN sexo = 'M' THEN 1 ELSE 0 END)::int AS prestamos_mujeres,
++     SUM(CASE WHEN sexo IS NULL THEN 1 ELSE 0 END)::int AS prestamos_sexo_desconocido
     FROM loans
     ${whereSql}
   `;
   const r = await pool.query(q, params);
   return r.rows[0] || {
-    total: 0, activos: 0, vencidos: 0, devueltos: 0,
-    prestamos_alumnos: 0, prestamos_docentes: 0
-  };
+   total: 0, activos: 0, vencidos: 0, devueltos: 0,
+   prestamos_alumnos: 0, prestamos_docentes: 0,
+   prestamos_hombres: 0, prestamos_mujeres: 0, prestamos_sexo_desconocido: 0
+ };
 }
 
 /**
@@ -311,7 +315,7 @@ export async function findLoansWithTotal({ page=1, limit=20, estado, role, num_c
     )
     SELECT * FROM counted;
   `;
-  const { rows } = await pool.query(q, params);
-  const total = rows[0]?.total_rows ? Number(rows[0].total_rows) : 0;
-  return { rows, total };
+    const { rows } = await pool.query(q, params);
+    const total = rows[0]?.total_rows ? Number(rows[0].total_rows) : 0;
+    return { rows: rows.map(mapLoanRow), total };
 }

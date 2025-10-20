@@ -23,11 +23,13 @@ const toPayload = (values) => {
       num_control: values.num_control,
       nombre_completo: values.nombre_completo_alumno,
       carrera: values.carrera,
+      sexo: values.sexo_alumno || null,
     };
   } else {
     payload.docente = {
       nombre_completo: values.nombre_completo_docente,
       correo: values.correo,
+      sexo: values.sexo_docente || null,
     };
   }
   return payload;
@@ -47,6 +49,8 @@ export default function NewLoan() {
       carrera: '',
       nombre_completo_docente: '',
       correo: '',
+      sexo_alumno: '',
+      sexo_docente: '',
       estado_salida: '',
       notas: '',
     },
