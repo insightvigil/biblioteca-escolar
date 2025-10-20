@@ -67,4 +67,4 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 const HOST = process.env.HOST || 'localhost'
 //app.listen(PORT, '0.0.0.0', () => console.log(`Server: http://192.168.1.70:${PORT}`));
-app.listen(PORT,  () => console.log(`Server: http:${HOST}:${PORT}`));
+app.listen(PORT, HOST, () => console.log(`Server: http:${HOST}:${PORT}`));
