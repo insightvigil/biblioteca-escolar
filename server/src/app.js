@@ -1,3 +1,5 @@
+import './_reload-flag.js';
+
 // Entry point
 import "dotenv/config";
 import express from "express";
@@ -20,7 +22,7 @@ import adminLoansRouter from "./routes/admin.loans.routes.js";
 const app = express();
 const origins = process.env.CORS_ORIGIN.split(",")
 
-app.use(cors({
+/*app.use(cors({
   origin: (origin, cb) => {
     // permitir llamadas sin Origin (ej: curl, Postman)
     if (!origin) return cb(null, true)
@@ -28,7 +30,9 @@ app.use(cors({
     return cb(new Error("Not allowed by CORS"))
   },
   credentials: true,
-}))
+}))*/
+
+app.use(cors({ origin: true, credentials: true }))
 
 app.use(express.json());
 
@@ -61,4 +65,6 @@ app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Server: http://localhost:${PORT}`));
+const HOST = process.env.HOST || 'localhost'
+//app.listen(PORT, '0.0.0.0', () => console.log(`Server: http://192.168.1.70:${PORT}`));
+app.listen(PORT,  () => console.log(`Server: http:${HOST}:${PORT}`));

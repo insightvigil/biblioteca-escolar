@@ -9,10 +9,10 @@ import net from "net";
 
 const router = Router();
 
-// (Opcional, pero recomendable) token simple para proteger /settings
+// (Opcional) token para proteger /settings
 const SETTINGS_TOKEN = process.env.SETTINGS_TOKEN || null;
 function authGuard(req, res, next) {
-  if (!SETTINGS_TOKEN) return next(); // si no configuras token, pasa (útil en LAN)
+  if (!SETTINGS_TOKEN) return next();
   const hdr = req.headers.authorization || "";
   const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : null;
   if (token !== SETTINGS_TOKEN) {
@@ -20,18 +20,15 @@ function authGuard(req, res, next) {
   }
   next();
 }
-
 router.use(authGuard);
 
-// Utilidades de paths
+// Paths
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const projectRoot = process.cwd(); // asumiendo que .env está en la raíz del proyecto
+const projectRoot = process.cwd(); // .env en raíz del proyecto
 const envPath = path.join(projectRoot, ".env");
 
 // --- Helpers --- //
-
-/** Lee el .env y lo retorna como string */
 async function readEnvFile() {
   try {
     return await fs.readFile(envPath, "utf8");
@@ -41,7 +38,6 @@ async function readEnvFile() {
   }
 }
 
-/** Escribe atomically el .env: backup + write temp + rename */
 async function writeEnvAtomically(newContent) {
   // 1) backup
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 15);
@@ -52,20 +48,17 @@ async function writeEnvAtomically(newContent) {
   } catch {
     // si no existe .env, no pasa nada
   }
-
-  // 2) temp + rename (write-then-rename atomic)
+  // 2) temp + rename (atomic)
   const tmpName = `.env.tmp-${crypto.randomBytes(6).toString("hex")}`;
   const tmpPath = path.join(projectRoot, tmpName);
   await fs.writeFile(tmpPath, newContent, { mode: 0o600 });
   await fs.rename(tmpPath, envPath);
 }
 
-/** Obtiene el valor de DATABASE_URL en el .env (sin evaluar process.env) */
 function extractEnvValue(envText, key) {
   const re = new RegExp(`^\\s*${key}\\s*=\\s*(.*)\\s*$`, "m");
   const m = envText.match(re);
   if (!m) return null;
-  // soporta valores entrecomillados
   const raw = m[1].trim();
   if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
     return raw.slice(1, -1);
@@ -73,19 +66,14 @@ function extractEnvValue(envText, key) {
   return raw;
 }
 
-/** Reemplaza (o inserta si no existe) una KEY=VALUE en el texto .env */
 function upsertEnvKey(envText, key, value) {
   const line = `${key}=${value}`;
   const re = new RegExp(`^\\s*${key}\\s*=\\s*.*$`, "m");
-  if (re.test(envText)) {
-    return envText.replace(re, line);
-  }
-  // si no existe, agrega al final con salto de línea
+  if (re.test(envText)) return envText.replace(re, line);
   const nl = envText.endsWith("\n") ? "" : "\n";
   return envText + nl + line + "\n";
 }
 
-/** Enmascara password en un URL tipo postgres://user:pass@host:port/db */
 function maskDatabaseUrl(dbUrl) {
   try {
     const u = new URL(dbUrl);
@@ -97,29 +85,33 @@ function maskDatabaseUrl(dbUrl) {
   }
 }
 
-/** Devuelve un objeto seguro con los componentes del DATABASE_URL */
 function parseDatabaseUrlSafe(dbUrl) {
   const u = new URL(dbUrl);
   return {
-    protocol: u.protocol,          // "postgres:"
+    protocol: u.protocol,
     host: u.hostname,
     port: u.port || "5432",
     user: u.username || "",
     database: u.pathname.replace(/^\//, ""),
-    // password no se incluye por seguridad
   };
 }
 
-/** Valida IP v4/v6 o hostname simple */
 function isValidHost(host) {
-  if (net.isIP(host) !== 0) return true; // IPv4 o IPv6
-  // hostname (básico): letras, números, guiones, puntos; no espacios
-  return /^[a-zA-Z0-9.-]+$/.test(host);
+  if (net.isIP(host) !== 0) return true; // IPv4/IPv6
+  return /^[a-zA-Z0-9.-]+$/.test(host); // hostname simple
+}
+
+// ---- NUEVO: Forzar reload tocando un JS importado por app.js ----
+async function bumpReloadFlag() {
+  const flagPath = path.join(projectRoot, "src", "_reload-flag.js");
+  const stamp = new Date().toISOString();
+  const content =
+    `// Auto-generated to trigger Node --watch reload\n` +
+    `export const RELOAD_STAMP = '${stamp}';\n`;
+  await fs.writeFile(flagPath, content, { mode: 0o644 });
 }
 
 // --- Rutas --- //
-
-/** GET /settings → info DB actual (segura) */
 router.get("/", async (_req, res) => {
   try {
     const envText = await readEnvFile();
@@ -140,14 +132,10 @@ router.get("/", async (_req, res) => {
   }
 });
 
-/** PUT /settings/db-host  Body: { "host": "192.168.0.150" } */
 router.put("/db-host", async (req, res) => {
   try {
     const host = String(req.body?.host || "").trim();
-
-    if (!host) {
-      return res.status(400).json({ message: "Falta 'host' en el body" });
-    }
+    if (!host) return res.status(400).json({ message: "Falta 'host' en el body" });
     if (!isValidHost(host)) {
       return res.status(400).json({ message: "Host inválido. Usa IPv4/IPv6 o un hostname válido." });
     }
@@ -158,12 +146,10 @@ router.put("/db-host", async (req, res) => {
       return res.status(400).json({ message: "DATABASE_URL no encontrado en .env ni en process.env" });
     }
 
-    // reconstruye URL cambiando solo hostname
     let newUrl;
     try {
       const u = new URL(currentUrl);
-      u.hostname = host;
-      // conserva puerto/usuario/password/base de datos
+      u.hostname = host; // sólo cambiamos el host
       newUrl = u.toString();
     } catch (e) {
       return res.status(400).json({ message: "DATABASE_URL actual es inválido", detail: String(e) });
@@ -172,11 +158,15 @@ router.put("/db-host", async (req, res) => {
     const updatedEnv = upsertEnvKey(envText, "DATABASE_URL", newUrl);
     await writeEnvAtomically(updatedEnv);
 
+    // ---- NUEVO: tocar el flag para que node --watch reinicie ----
+    await bumpReloadFlag();
+
+    // Responder OK con aviso de reinicio
     return res.json({
-      message: "DATABASE_URL actualizado en .env (host cambiado).",
+      message: "DATABASE_URL actualizado en .env (host cambiado). El servidor se reiniciará después del cambio.",
       databaseUrlMasked: maskDatabaseUrl(newUrl),
       info: parseDatabaseUrlSafe(newUrl),
-      note: "El cambio persiste en disco. El proceso Node debe recargar variables para usarlo.",
+      restarting: true
     });
   } catch (err) {
     console.error(err);
