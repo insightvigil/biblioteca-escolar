@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1'
+const baseURL = import.meta.env.VITE_API_URL || 'http://192.168.1.70:4000/api/v1'
  if (!import.meta.env.VITE_API_URL) console.warn('[ADMIN] VITE_API_URL no definido, usando', baseURL)
 
 export const api = axios.create({ baseURL, timeout: 12000 })

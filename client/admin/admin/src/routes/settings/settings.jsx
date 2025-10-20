@@ -20,7 +20,6 @@ export default function Settings() {
   const [ok, setOk] = useState('')
   const [host, setHost] = useState('')
   const [info, setInfo] = useState(null)
-  const [showRestart, setShowRestart] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -44,7 +43,6 @@ export default function Settings() {
     e.preventDefault()
     setError('')
     setOk('')
-    setShowRestart(false)
 
     const v = host.trim()
     if (!isValidHost(v)) {
@@ -55,29 +53,16 @@ export default function Settings() {
     try {
       setSaving(true)
       const res = await updateDbHost(v)
-      setOk(res?.message || 'Actualizado correctamente.')
+      setOk(res?.message || 'Actualizado correctamente. El servidor se reiniciará después del cambio.')
       setInfo((prev) => ({
         ...(prev || {}),
         databaseUrlMasked: res?.databaseUrlMasked ?? prev?.databaseUrlMasked,
         info: res?.info ?? prev?.info,
       }))
-      // Mostrar mensaje y botón de reinicio
-      setShowRestart(true)
     } catch (e) {
       setError(e.message || 'Error actualizando host de la base de datos')
     } finally {
       setSaving(false)
-    }
-  }
-
-  const onRestart = async () => {
-    try {
-      setOk('Reiniciando servidor...')
-      await fetch('/settings/restart', { method: 'POST' })
-      setOk('El servidor se está reiniciando. Puede tardar unos segundos.')
-      setShowRestart(false)
-    } catch (e) {
-      setError('No se pudo reiniciar el servidor.')
     }
   }
 
@@ -118,14 +103,10 @@ export default function Settings() {
         </div>
 
         {error && <div className="alert error" style={{ marginTop:8 }}>{error}</div>}
-        {ok && <div className="alert success" style={{ marginTop:8 }}>{ok}</div>}
-
-        {showRestart && (
-          <div className="alert warning" style={{ marginTop:12 }}>
-            ⚠️ El servidor debe reiniciarse para funcionar correctamente.<br/>
-            <Button onClick={onRestart} className="btn-secondary" style={{ marginTop:8 }}>
-              Reiniciar servidor ahora
-            </Button>
+        {ok && (
+          <div className="alert success" style={{ marginTop:8 }}>
+            {ok}<br/>
+            <small>El servidor se reiniciará después del cambio.</small>
           </div>
         )}
       </form>
