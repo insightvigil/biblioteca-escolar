@@ -14,6 +14,10 @@ import adminBooksRouter from "./routes/admin.books.routes.js";
 import adminCategoriesRouter from "./routes/admin.categories.routes.js";
 import settingsRouter from "./routes/settings.routes.js";
 
+import administratorRouter from './routes/administrator.books.routes.js'
+import importRoutes from './routes/administrator.import.routes.js';
+import studentsHomeRouter from "./routes/students.home.routes.js"
+
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
 
@@ -41,8 +45,8 @@ app.get("/api/v1/health", async (_req, res) => {
   res.json({ status: "ok", time: now.rows[0].now });
 });
 
-
-
+//Personal Testing
+app.use("/api/v1/books",studentsHomeRouter);
 
 
 // Public v1
@@ -52,6 +56,7 @@ app.use("/api/v1/search", searchRouter);
 app.use("/api/v1/categories", categoriesRouter);
 app.use("/api/v1/books", booksRouter);
 
+
 // Admin v1
 app.use("/api/v1/admin/categories", adminCategoriesRouter);
 app.use("/api/v1/admin/books", adminBooksRouter);
@@ -60,6 +65,14 @@ app.use("/api/v1/admin/books", adminBooksRouter);
 app.use("/api/v1/admin/loans", adminLoansRouter);
 
 app.use("/settings", settingsRouter);
+
+
+
+
+//Admin Personalized
+app.use("/api/v1/admin", administratorRouter);
+app.use('/api/v1/import', importRoutes);
+
 
 app.use(notFound);
 app.use(errorHandler);

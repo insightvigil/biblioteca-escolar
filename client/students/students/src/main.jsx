@@ -17,7 +17,7 @@ import './styles/main.scss'
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <App />,
+    element: <App/>,
     errorElement: <NotFound />,
     children: [
       { index: true, element: <Home /> },
