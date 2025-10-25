@@ -178,3 +178,77 @@ export const deleteBook = async (req, res) => {
     res.status(500).json({ message: err.message || 'Error al eliminar libro' });
   }
 };
+
+// === ISBN helpers ===
+const normalizeIsbn = (s='') => (s.replace(/[^0-9Xx]/g,'').toUpperCase())
+
+// GET /api/v1/admin/books/by-isbn/:isbn  (match exacto)
+export async function getBookByIsbn(req, res, next) {
+  try {
+    const raw = req.params.isbn || ''
+    const q = normalizeIsbn(raw)
+    if (q.length < 10) return res.status(400).json({ message: 'ISBN inválido' })
+
+    const sql = `
+      SELECT
+        b.id, b.title, b.author, b.year, b.isbn13, b.isbn10, b.editorial,
+        b.volumen_tomo, b.estante, b.nivel, b.paginas, b.idioma,
+        b.sinopsis, b.cover_url, b.stock, b.category_id, b.created_at,
+        c.name AS category_name
+      FROM public.books b
+      LEFT JOIN public.categories c ON c.id = b.category_id
+      WHERE REPLACE(UPPER(COALESCE(b.isbn13,'')),'-','') = $1
+         OR REPLACE(UPPER(COALESCE(b.isbn10,'')),'-','') = $1
+      LIMIT 1
+    `;
+    const { rows } = await pool.query(sql, [q])
+    if (!rows.length) return res.status(404).json({ message: 'No encontrado' })
+    res.json(rows[0])
+  } catch (err) {
+    next(err)
+  }
+}
+
+// GET /api/v1/admin/books/search?q=... (fallback flexible)
+export async function searchBooksAdmin(req, res, next) {
+  try {
+    const qRaw = (req.query.q || '').trim()
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 10)
+    if (!qRaw) return res.json([])
+
+    const qNorm = normalizeIsbn(qRaw)
+    let rows;
+
+    // Si parece ISBN (>=10 dígitos/letra X), intentamos exacto primero
+    if (qNorm.length >= 10) {
+      const sql = `
+        SELECT b.id, b.title, b.author, b.year, b.isbn13, b.isbn10,
+               b.editorial, b.volumen_tomo, b.estante, b.nivel, b.paginas,
+               b.idioma, b.sinopsis, b.cover_url, b.stock, b.category_id, b.created_at
+          FROM public.books b
+         WHERE REPLACE(UPPER(COALESCE(b.isbn13,'')),'-','') = $1
+            OR REPLACE(UPPER(COALESCE(b.isbn10,'')),'-','') = $1
+         LIMIT $2
+      `;
+      const r = await pool.query(sql, [qNorm, limit])
+      rows = r.rows
+      if (rows.length) return res.json(rows)
+    }
+
+    // Fallback por título/autor (ILIKE)
+    const like = `%${qRaw}%`
+    const sql2 = `
+      SELECT b.id, b.title, b.author, b.year, b.isbn13, b.isbn10,
+             b.editorial, b.volumen_tomo, b.estante, b.nivel, b.paginas,
+             b.idioma, b.sinopsis, b.cover_url, b.stock, b.category_id, b.created_at
+        FROM public.books b
+       WHERE b.title ILIKE $1 OR b.author ILIKE $1
+       ORDER BY b.created_at DESC
+       LIMIT $2
+    `;
+    const r2 = await pool.query(sql2, [like, limit])
+    res.json(r2.rows)
+  } catch (err) {
+    next(err)
+  }
+}

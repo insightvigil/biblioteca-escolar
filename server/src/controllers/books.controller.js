@@ -237,26 +237,27 @@ export const remove = async (req, res) => {
 };
 
 //Mis funciones personalizadas
-export async function getLastestAdded(req, res, next) {
+export async function getLastestAdded(req, res) {
   try {
-     // Permite ajustar el límite desde query param opcional (por ejemplo ?limit=8)
-    const limit = Math.min(parseInt(req.query.limit ?? "5", 10), 20); // máximo 20 por seguridad
-
-     const { rows } = await pool.query(
-      `SELECT id, cover_url, title, author
-       FROM books
-       ORDER BY created_at DESC
-       LIMIT $1`,
-      [limit]
-    );
-
+    const limit = Number(req.query.limit) > 0 ? Number(req.query.limit) : 20;
+    const sql = `
+      SELECT
+        id,
+        title,
+        author,
+        cover_url,
+        to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
+        stock,
+        (stock IS NOT NULL AND stock > 0) AS available
+      FROM books
+      ORDER BY created_at DESC
+      LIMIT $1
+    `;
+    const { rows } = await pool.query(sql, [limit]);
     res.json(rows);
-
-  }
-
-  catch(err){
-    console.error("[getLatest error]", err);
-    next(err);
+  } catch (err) {
+    console.error('[getLatestBooks] Error:', err);
+    res.status(500).json({ message: 'Error obteniendo libros recientes' });
   }
 }
 
@@ -276,15 +277,18 @@ export async function getBooksGridByCategory(req, res) {
           (
             SELECT JSON_AGG(
               JSON_BUILD_OBJECT(
-                'id',       b.id,
-                'title',    b.title,
-                'author',   b.author,
-                'cover_url',b.cover_url
+                'id',          b.id,
+                'title',       b.title,
+                'author',      b.author,
+                'cover_url',   b.cover_url,
+                'created_at',  to_char(b.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+                'stock',       b.stock,
+                'available',   (b.stock IS NOT NULL AND b.stock > 0)
               )
               ORDER BY b.title
             )
             FROM (
-              SELECT id, title, author, cover_url
+              SELECT id, title, author, cover_url, created_at, stock
               FROM books
               WHERE category_id = c.id
               ORDER BY title
@@ -297,6 +301,7 @@ export async function getBooksGridByCategory(req, res) {
       ORDER BY c.name
       ${catLimit ? 'LIMIT $2' : ''}
     `;
+
     const params = catLimit ? [bookLimit, catLimit] : [bookLimit];
     const { rows } = await pool.query(sql, params);
 
@@ -370,10 +375,14 @@ export async function getAllBooksByCategoryId(req, res) {
         COALESCE(
           json_agg(
             json_build_object(
-              'id',        b.id,
-              'title',     b.title,
-              'author',    b.author,
-              'cover_url', b.cover_url
+              'id',          b.id,
+              'title',       b.title,
+              'author',      b.author,
+              'cover_url',   b.cover_url,
+              -- ISO 8601 con "T" y milisegundos; en UTC para parsing consistente
+              'created_at',  to_char(b.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+              'stock',       b.stock,
+              'available',   (b.stock IS NOT NULL AND b.stock > 0)
             )
             ORDER BY b.title
           ) FILTER (WHERE b.id IS NOT NULL),
@@ -391,7 +400,8 @@ export async function getAllBooksByCategoryId(req, res) {
       return res.status(404).json({ message: 'Categoría no encontrada' });
     }
 
-    return res.json(rows[0]); // { id, name, description, books: [...] }
+    // Respuesta: { id, name, description, books: [{ id, title, author, cover_url, created_at, stock, available }...] }
+    return res.json(rows[0]);
   } catch (err) {
     console.error('[getAllBooksByCategoryId] Error:', err);
     return res.status(500).json({ message: 'Error obteniendo los libros de la categoría' });

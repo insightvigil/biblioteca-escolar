@@ -5,24 +5,18 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { pool } from "./db/pool.js";
-import categoriesRouter from "./routes/categories.routes.js";
-import booksRouter from "./routes/books.routes.js";
-import homeRouter from "./routes/home.routes.js";
-import regulationRouter from "./routes/regulation.routes.js";
-import searchRouter from "./routes/search.routes.js";
-import adminBooksRouter from "./routes/admin.books.routes.js";
-import adminCategoriesRouter from "./routes/admin.categories.routes.js";
-import settingsRouter from "./routes/settings.routes.js";
 
+
+import adminRouter from './routes/administrator.routes.js'
 import administratorRouter from './routes/administrator.books.routes.js'
 import importRoutes from './routes/administrator.import.routes.js';
 import studentsHomeRouter from "./routes/students.home.routes.js"
 
-import { errorHandler } from "./middlewares/errorHandler.js";
+/*import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
 
 import adminLoansRouter from "./routes/admin.loans.routes.js";
-
+*/
 const app = express();
 const origins = process.env.CORS_ORIGIN.split(",")
 
@@ -48,14 +42,16 @@ app.get("/api/v1/health", async (_req, res) => {
 //Personal Testing
 app.use("/api/v1/books",studentsHomeRouter);
 
+//Admin
+app.use('/api/v1/admin', adminRouter);
 
+/*
 // Public v1
 app.use("/api/v1/home", homeRouter);
 app.use("/api/v1/regulation", regulationRouter);
 app.use("/api/v1/search", searchRouter);
 app.use("/api/v1/categories", categoriesRouter);
 app.use("/api/v1/books", booksRouter);
-
 
 // Admin v1
 app.use("/api/v1/admin/categories", adminCategoriesRouter);
@@ -66,7 +62,7 @@ app.use("/api/v1/admin/loans", adminLoansRouter);
 
 app.use("/settings", settingsRouter);
 
-
+*/
 
 
 //Admin Personalized
@@ -74,8 +70,8 @@ app.use("/api/v1/admin", administratorRouter);
 app.use('/api/v1/import', importRoutes);
 
 
-app.use(notFound);
-app.use(errorHandler);
+/*app.use(notFound);
+app.use(errorHandler);*/
 
 const PORT = process.env.PORT || 4000;
 const HOST = process.env.HOST || 'localhost'

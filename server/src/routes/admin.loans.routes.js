@@ -1,4 +1,4 @@
-// server/routes/admin.loans.routes.js
+/*// server/routes/admin.loans.routes.js
 import express from "express";
 import { getById, findLoans, getAggregates, findLoansWithTotal } from "../lib/loans/repository.js";
 import { createLoan, renewLoan, returnLoan } from "../lib/loans/service.js";
@@ -40,6 +40,7 @@ router.get("/reports/aggregates", async (req, res, next) => {
  * Respeta los mismos filtros que el listado.
  * Devuelve archivo CSV con encabezados.
  */
+/*
 router.get("/export.csv", async (req, res, next) => {
   try {
     // Reutilizamos findLoans (sin paginación) para obtener todos los registros filtrados
@@ -166,3 +167,4 @@ router.post("/:id/return", async (req, res, next) => {
 });
 
 export default router;
+*/
