@@ -374,10 +374,23 @@ export async function findUsers(req, res) {
 }
 
 export async function createUser(req, res) {
-  const { role, first_name, last_name, sex, control_number, career_id, email } = req.body || {}
   try {
+    let { role, first_name, last_name, sex, control_number, career_id, email } = req.body || {}
+
+    // Normalización mínima
+    role = String(role || '').toLowerCase() // 'student' | 'professor'
+    first_name = (first_name || '').trim()
+    last_name  = (last_name  || '').trim()
+    sex = (sex || '').toUpperCase()         // 'H' | 'M' | 'X'
+    control_number = (control_number || '').trim()
+    email = (email || '').trim().toLowerCase()
+
+    // Validaciones front-friendly
     if (!role || !first_name || !last_name || !sex) {
       return res.status(400).json({ error: 'Campos obligatorios faltantes' })
+    }
+    if (!['H','M','X'].includes(sex)) {
+      return res.status(400).json({ error: "El campo 'sex' debe ser H, M o X" })
     }
 
     let finalEmail = email
@@ -410,10 +423,10 @@ export async function createUser(req, res) {
       return res.status(200).json(ex.rows[0])
     }
 
-    res.status(201).json(rows[0])
+    return res.status(201).json(rows[0])
   } catch (err) {
     console.error('[createUser]', err)
-    res.status(500).json({ error: 'createUser failed' })
+    return res.status(500).json({ error: err.message || 'createUser failed' })
   }
 }
 
@@ -505,12 +518,66 @@ export async function deleteHoliday(req, res) {
 
 // === NUEVO: listado para la tabla "with-items" ===
 // === REEMPLAZA listLoansWithItems por esta versión enriquecida ===
+// controllers/admin-loans.controller.js  (fragmento)
+
+
+
 export async function listLoansWithItems(req, res) {
   const page = Math.max(1, Number(req.query.page || 1));
-  // Si piden "todos", permite un pageSize grande; por defecto 10
-  const pageSizeParam = req.query.pageSize === 'all' ? 2000 : Number(req.query.pageSize || 10);
+  const pageSizeParam = req.query.pageSize === 'all' ? 2000 : Number(req.query.pageSize || 20);
   const pageSize = Math.min(5000, Math.max(1, pageSizeParam));
   const offset = (page - 1) * pageSize;
+
+  const {
+    q,                 // control o email
+    period_id,
+    start_from,        // YYYY-MM-DD
+    start_to,          // YYYY-MM-DD
+    role,              // student|professor
+    sex,               // M|F|X
+    status,            // active|overdue|returned|canceled
+    only_overdue       // '1'
+  } = req.query;
+
+  const where = [];
+  const args = [];
+  const push = (sql, ...vals) => {
+  for (const v of vals) args.push(v);
+  let i = args.length - vals.length + 1;
+  where.push(sql.replace(/\$(\?)/g, () => '$' + (i++)));
+};
+
+// --- filtros ---
+if (q) push(
+  `(u.email ILIKE $?
+    OR u.control_number ILIKE $?)`,
+  `%${q}%`, `%${q}%`
+);
+
+if (period_id) push(`l.period_id = $?`, Number(period_id));
+if (start_from) push(`l.start_date >= $?`, start_from);
+if (start_to)   push(`l.start_date <= $?`, start_to);
+if (role)       push(`u.role = $?`, role);
+
+// ⚠️ Tu BD usa 'H' | 'M' | 'X'. Si el front manda 'F', lo normalizamos a 'M' (Mujer)
+if (sex) {
+  push(`u.sex = $?`, sex);
+}
+
+if (status) push(`l.status = $?`, status);
+
+// Solo vencidos con al menos un ítem sin devolver
+if (only_overdue === '1') {
+  where.push(`(
+    l.due_date < CURRENT_DATE
+    AND EXISTS (
+      SELECT 1 FROM loan_items li2
+      WHERE li2.loan_id=l.id AND li2.returned_at IS NULL
+    )
+  )`);
+}
+
+  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
   try {
     const { rows } = await pool.query(
@@ -527,6 +594,8 @@ export async function listLoansWithItems(req, res) {
         u.control_number AS person_control,
         u.sex            AS person_sex,
         u.role           AS person_role,
+        u.email          AS person_email,
+        c.name           AS career_name,
 
         ap.name          AS period_name,
         EXTRACT(YEAR FROM ap.date_start)::int AS period_year,
@@ -539,6 +608,7 @@ export async function listLoansWithItems(req, res) {
 
         li.renewal_count,
         li.returned_at,
+        li.fine_cents,
 
         CASE
           WHEN li.returned_at IS NOT NULL THEN 'RETURNED'
@@ -546,24 +616,34 @@ export async function listLoansWithItems(req, res) {
           ELSE 'CHECKED_OUT'
         END AS item_status
       FROM loan_items li
-      JOIN loans l            ON l.id = li.loan_id
-      JOIN users u            ON u.id = l.user_id
+      JOIN loans l             ON l.id = li.loan_id
+      JOIN users u             ON u.id = l.user_id
+      LEFT JOIN careers c      ON c.id = u.career_id
       JOIN academic_periods ap ON ap.id = l.period_id
-      JOIN books b            ON b.id = li.book_id
+      JOIN books b             ON b.id = li.book_id
+      ${whereSql}
       ORDER BY li.id DESC
-      LIMIT $1 OFFSET $2
+      LIMIT $${args.length+1} OFFSET $${args.length+2}
       `,
-      [pageSize, offset]
+      [...args, pageSize, offset]
     );
 
-    // total = cantidad total de items (no filtramos por estado)
-    const { rows: tc } = await pool.query(`SELECT COUNT(*)::int AS total FROM loan_items`);
+    const { rows: tc } = await pool.query(
+      `SELECT COUNT(*)::int AS total
+         FROM loan_items li
+         JOIN loans l ON l.id = li.loan_id
+         JOIN users u ON u.id = l.user_id
+         ${whereSql}`,
+      args
+    );
+
     res.json({ items: rows, meta: { page, pageSize, total: tc[0].total } });
   } catch (err) {
     console.error('[listLoansWithItems]', err);
     res.status(500).json({ error: 'listLoansWithItems failed' });
   }
 }
+
 
 
 // === NUEVO: cancelar préstamo (marca status='cancelled') ===
@@ -616,5 +696,94 @@ export async function cancelLoan(req, res) {
   } catch (err) {
     console.error('[cancelLoan]', err);
     return res.status(500).json({ error: err.message || 'cancelLoan failed' });
+  }
+}
+
+// ⬇️ agrega esto al final del archivo (o cerca de createLoan)
+export async function calcDueDate(req, res) {
+  try {
+    // admite ?start_date=YYYY-MM-DD&period_id=1&role=student  ó  ?start_date=...&period_id=...&user_id=123
+    let { start_date, period_id, role, user_id } = req.query || {};
+    if (!start_date || !period_id) {
+      return res.status(400).json({ error: 'start_date y period_id son requeridos' });
+    }
+
+    // si no mandan role, lo inferimos con user_id
+    if (!role && user_id) {
+      const { rows } = await pool.query(`SELECT role FROM users WHERE id=$1`, [user_id]);
+      role = rows[0]?.role;
+    }
+
+    role = String(role || '').toLowerCase();
+    if (role !== 'student') {
+      // solo calculamos para alumno; para profesor el front permite editar manualmente
+      return res.status(400).json({ error: 'Solo alumnos calculan due_date automático' });
+    }
+
+    // 3 días hábiles (ajústalo si tu regla cambia)
+    const { rows } = await pool.query(
+      `SELECT add_business_days($1::date, 3, $2::bigint) AS due_date`,
+      [start_date, Number(period_id)]
+    );
+    return res.json({ due_date: rows[0]?.due_date || null });
+  } catch (err) {
+    console.error('[calcDueDate]', err);
+    return res.status(500).json({ error: err.message || 'calcDueDate failed' });
+  }
+}
+
+// 👇 util zonal
+const isoOnly = (d) => new Date(d).toISOString().slice(0,10)
+
+/**
+ * GET /api/v1/admin/loans/preview-due?user_id=..&period_id=..&start_date=YYYY-MM-DD&due_date=YYYY-MM-DD(opc)
+ * - student  -> calcula due_date = add_business_days(start, 3, period_id)
+ * - professor-> requiere due_date y valida que sea >= start y dentro del periodo
+ */
+export async function previewDueDate(req, res) {
+  try {
+    const user_id   = Number(req.query.user_id)
+    const period_id = Number(req.query.period_id)
+    const start     = req.query.start_date ? isoOnly(req.query.start_date) : isoOnly(new Date())
+    const due_in    = req.query.due_date ? isoOnly(req.query.due_date) : null
+
+    if (!user_id || !period_id) {
+      return res.status(400).json({ error: 'user_id y period_id son requeridos' })
+    }
+
+    // role + periodo
+    const [u, p] = await Promise.all([
+      pool.query(`SELECT role FROM users WHERE id=$1`, [user_id]),
+      pool.query(`SELECT date_start, date_end FROM academic_periods WHERE id=$1`, [period_id])
+    ])
+    if (!u.rows[0]) return res.status(404).json({ error: 'Usuario no encontrado' })
+    if (!p.rows[0]) return res.status(404).json({ error: 'Periodo no encontrado' })
+
+    const role = String(u.rows[0].role)
+    const { date_start, date_end } = p.rows[0]
+
+    if (role === 'student') {
+      // usa tu función SQL existente add_business_days(base, n, period_id)
+      const { rows } = await pool.query(
+        `SELECT add_business_days($1::date, 3, $2::bigint) AS due_date`,
+        [start, period_id]
+      )
+      return res.json({ start_date: start, due_date: rows[0].due_date })
+    }
+
+    // profesor: due_date obligatorio y validado
+    if (!due_in) {
+      return res.status(400).json({ error: 'Profesores requieren due_date explícito' })
+    }
+    if (new Date(due_in) < new Date(start)) {
+      return res.status(400).json({ error: 'due_date debe ser >= start_date' })
+    }
+    if (new Date(due_in) < new Date(date_start) || new Date(due_in) > new Date(date_end)) {
+      return res.status(400).json({ error: 'due_date fuera del rango del periodo' })
+    }
+    return res.json({ start_date: start, due_date: due_in })
+  } catch (err) {
+    console.error('[previewDueDate]', err)
+    res.status(500).json({ error: err.message || 'previewDueDate failed' })
   }
 }
