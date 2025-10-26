@@ -120,3 +120,44 @@ export const deleteCategory = async (req, res) => {
     res.status(500).json({ message: err.message || 'Error al eliminar categoría' });
   }
 };
+
+
+// NUEVO: paginado (idéntico al que te pasé), pero NO en /admin/categories
+export const getCategoriesPaged = async (req, res) => {
+  try {
+    let { q = '', sort = 'name', order = 'asc', page = '1', pageSize = '20' } = req.query;
+    q = String(q || '').trim();
+    page = Math.max(1, parseInt(page, 10) || 1);
+    pageSize = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20));
+    const offset = (page - 1) * pageSize;
+
+    const SORT_MAP = { id: 'id', name: 'name', description: 'description', book_count: 'book_count' };
+    const sortCol = SORT_MAP[sort] || 'name';
+    const dir = (String(order).toLowerCase() === 'desc') ? 'DESC' : 'ASC';
+
+    const sql = `
+      WITH cats AS (
+        SELECT
+          c.id,
+          c.name,
+          c.description,
+          COUNT(b.id)::int AS book_count
+        FROM categories c
+        LEFT JOIN books b ON b.category_id = c.id
+        WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%' OR c.description ILIKE '%' || $1 || '%')
+        GROUP BY c.id
+      )
+      SELECT *, COUNT(*) OVER()::int AS total
+      FROM cats
+      ORDER BY ${sortCol} ${dir}
+      LIMIT $2 OFFSET $3
+    `;
+
+    const { rows } = await pool.query(sql, [q, pageSize, offset]);
+    const total = rows[0]?.total || 0;
+    res.json({ items: rows.map(({ total, ...r }) => r), total, page, pageSize });
+  } catch (err) {
+    console.error('getCategoriesPaged error:', err);
+    res.status(500).json({ message: 'Error al obtener categorías paginadas' });
+  }
+};

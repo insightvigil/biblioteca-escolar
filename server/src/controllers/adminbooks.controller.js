@@ -4,27 +4,90 @@ import { toNull, toIntOrNull } from '../utils/sql-helpers.js';
 
 
 // GET /api/v1/admin/booksNew
+// ✅ Listas blancas y mapeo a columnas reales (evita inyección)
+const ALLOWED_SORT = new Set([
+  'created_at',
+  'title',
+  'author',
+  'id',
+  'stock',
+  'category_name', // <-- habilitado
+]);
+
+const ALLOWED_ORDER = new Set(['asc', 'desc']);
+
+const ORDER_BY_MAP = {
+  created_at: 'b.created_at',
+  title:      'b.title',
+  author:     'b.author',
+  id:         'b.id',
+  stock:      'b.stock',
+  category_name: 'c.name', // <-- ordena por categoría
+};
+
 export async function getAllBooksAdmin(req, res, next) {
   try {
+    const page = Math.max(parseInt(req.query.page ?? '1', 10), 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize ?? '20', 10), 5), 100);
+
+    const sortParam  = (req.query.sort || '').toLowerCase();
+    const orderParam = (req.query.order || '').toLowerCase();
+
+    const sort  = ALLOWED_SORT.has(sortParam)  ? sortParam  : 'created_at';
+    const order = ALLOWED_ORDER.has(orderParam) ? orderParam : 'desc';
+
+    const sortExpr = ORDER_BY_MAP[sort]; // columna segura
+    const q = (req.query.q || '').trim();
+
+    const offset = (page - 1) * pageSize;
+
+    // ------- Filtro de búsqueda básico (incluye categoría) -------
+    const whereClauses = [];
+    const params = [];
+    if (q) {
+      params.push(`%${q}%`); // $1
+      params.push(`%${q}%`); // $2
+      params.push(`%${q}%`); // $3
+      whereClauses.push(
+        `(b.title ILIKE $${params.length - 2} OR b.author ILIKE $${params.length - 1} OR c.name ILIKE $${params.length})`
+      );
+    }
+    const whereSQL = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    // ------- Query con paginación y total -------
     const sql = `
       SELECT
         b.id, b.title, b.author, b.year, b.isbn13, b.isbn10, b.editorial,
         b.volumen_tomo, b.estante, b.nivel, b.paginas, b.idioma,
         b.sinopsis, b.cover_url, b.stock, b.category_id, b.created_at,
-        c.name AS category_name
+        c.name AS category_name,
+        COUNT(*) OVER() AS __total
       FROM public.books AS b
-      LEFT JOIN public.categories AS c
-        ON c.id = b.category_id
-      ORDER BY b.created_at DESC
+      LEFT JOIN public.categories AS c ON c.id = b.category_id
+      ${whereSQL}
+      ORDER BY ${sortExpr} ${order} NULLS LAST
+      LIMIT $${params.push(pageSize)} OFFSET $${params.push(offset)}
     `;
 
-    const { rows } = await pool.query(sql);
-    res.json(rows); // <-- SOLO el array
+    const { rows } = await pool.query(sql, params);
+    const total = rows[0]?.__total ? Number(rows[0].__total) : 0;
+
+    res.json({
+      items: rows.map(({ __total, ...r }) => r),
+      meta: {
+        total,
+        page,
+        pageSize,
+        pages: Math.max(1, Math.ceil(total / pageSize)),
+        sort,
+        order,
+        q
+      }
+    });
   } catch (err) {
     next(err);
   }
 }
-
 
 // GET /api/v1/admin/books/:id/edit
 export async function getBookForEdit(req, res, next) {

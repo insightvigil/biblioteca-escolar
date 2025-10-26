@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getAllBooksAdmin, getBookForEdit, createBook, getBookById, updateBook,
   deleteBook,getBookByIsbn,searchBooksAdmin} from "../controllers/adminbooks.controller.js";
-
+import {getCategoriesPaged} from '../controllers/admincategories.controller.js'
 
 import { getCategoriesWithCount,getCategoryById, listCategories,
   createCategory,
@@ -32,5 +32,7 @@ router.delete('/category/:id', deleteCategory);
 router.get("/books/by-isbn/:isbn", getBookByIsbn);   // <--- NUEVO
 router.get("/books/search", searchBooksAdmin);       // <--- NUEVO
 
+// *** NUEVO: versión paginada sin romper lo anterior ***
+router.get('/categories/paged', getCategoriesPaged);
 
 export default router;
