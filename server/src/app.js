@@ -8,10 +8,11 @@ import { pool } from "./db/pool.js";
 
 
 import adminRouter from './routes/administrator.routes.js';
+import adminLoans from './routes/administrator.loans.routes.js'
 import administratorRouter from './routes/administrator.books.routes.js';
 import importRoutes from './routes/administrator.import.routes.js';
 import studentsHomeRouter from "./routes/students.home.routes.js";
-
+import adminLoanSettings from './routes/adminloans.settings.routes.js';
 // NUEVOS
 //import loansRouter from './routes/administrator.loans.routes.js';
 import adminPeriods from './routes/administrator.periods.routes.js';
@@ -20,7 +21,7 @@ import adminPeriods from './routes/administrator.periods.routes.js';
 
 //Admin optimization 
 import adminBooksQuick from './routes/administrator.books.quick.routes.js'
-import adminLoans from './routes/administrator.loans.routes.js'
+
 import adminUsers from './routes/administrator.users.routes.js'
 const app = express();
 
@@ -45,11 +46,15 @@ app.use("/api/v1/books", studentsHomeRouter);
  * caiga en nuestros controladores (user_id), y no en otros routers
  * que podrían tener rutas similares esperando person_id.
  */
+
+app.use('/api/v1/admin', adminLoanSettings);
 app.use('/api/v1/admin', adminLoans)
 app.use('/api/v1/admin', adminBooksQuick)
 // Periodos/Holidays y Users (find/create/careers)
 app.use('/api/v1/admin', adminPeriods)
 app.use('/api/v1/admin', adminUsers);
+app.use('/api/v1/admin', adminUsers);
+
 
 // Routers admin existentes
 app.use('/api/v1/admin', adminRouter);

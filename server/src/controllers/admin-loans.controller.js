@@ -277,12 +277,43 @@ export async function returnLoanItem(req, res) {
       }
 
       const dateToSet = returned_at || todayISO();
-      const { rows } = await client.query(
+
+       // === NUEVO: calcular multa al devolver ===
+      // 1) settings (multa por día en centavos)
+      const { rows: stg } = await client.query(
+        `SELECT fine_per_day_cents FROM loan_settings LIMIT 1`
+      );
+      const finePerDay = Number(stg[0]?.fine_per_day_cents || 0);
+
+      // 2) datos del préstamo para calcular días de multa
+      const { rows: lend } = await client.query(
+        `SELECT l.due_date, l.period_id
+           FROM loan_items li
+           JOIN loans l ON l.id = li.loan_id
+          WHERE li.id = $1`,
+        [itemId]
+      );
+      const due = lend[0]?.due_date;
+      const periodId = lend[0]?.period_id;
+
+      // 3) días de multa con tu función SQL
+      let fineDays = 0;
+      if (due && dateToSet) {
+        const { rows: fd } = await client.query(
+          `SELECT fine_days($1::date, $2::date, $3::bigint) AS d`,
+          [due, dateToSet, periodId]
+        );
+        fineDays = Number(fd[0]?.d || 0);
+      }
+      const fineCents = Math.max(0, fineDays * finePerDay);
+
+     const { rows } = await client.query(
         `UPDATE loan_items
-            SET returned_at = $2
+            SET returned_at = $2,
+                fine_cents = $3
           WHERE id = $1
           RETURNING id, returned_at, fine_cents`,
-        [itemId, dateToSet]
+        [itemId, dateToSet, fineCents]
       );
       return rows[0];
     });
@@ -517,67 +548,55 @@ export async function deleteHoliday(req, res) {
 
 
 // === NUEVO: listado para la tabla "with-items" ===
-// === REEMPLAZA listLoansWithItems por esta versión enriquecida ===
-// controllers/admin-loans.controller.js  (fragmento)
-
-
-
+// === NUEVO: listado para la tabla "with-items" (sin depender de li.status) ===
 export async function listLoansWithItems(req, res) {
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSizeParam = req.query.pageSize === 'all' ? 2000 : Number(req.query.pageSize || 20);
   const pageSize = Math.min(5000, Math.max(1, pageSizeParam));
   const offset = (page - 1) * pageSize;
 
+  // Filtros básicos (q, period_id, role, sex, solo vencidos)
   const {
     q,                 // control o email
     period_id,
     start_from,        // YYYY-MM-DD
     start_to,          // YYYY-MM-DD
     role,              // student|professor
-    sex,               // M|F|X
-    status,            // active|overdue|returned|canceled
+    sex,               // M|F  (se almacena M/F en BD)
     only_overdue       // '1'
   } = req.query;
 
   const where = [];
-  const args = [];
-  const push = (sql, ...vals) => {
-  for (const v of vals) args.push(v);
-  let i = args.length - vals.length + 1;
-  where.push(sql.replace(/\$(\?)/g, () => '$' + (i++)));
-};
+  const args  = [];
 
-// --- filtros ---
-if (q) push(
-  `(u.email ILIKE $?
-    OR u.control_number ILIKE $?)`,
-  `%${q}%`, `%${q}%`
-);
+  // Filtro por estado del PRÉSTAMO (l.status) — aceptar 'canceled' o 'cancelled'
+  if (req.query.status) {
+    let st = String(req.query.status).toLowerCase().trim();
+    if (st === 'canceled') st = 'cancelled'; // tolerancia
+    // validamos solo contra los del enum de loans
+    const allowed = ['active','overdue','returned','lost','damaged','cancelled'];
+    if (allowed.includes(st)) {
+      args.push(st);
+      where.push(`l.status = $${args.length}`);
+    }
+  }
 
-if (period_id) push(`l.period_id = $?`, Number(period_id));
-if (start_from) push(`l.start_date >= $?`, start_from);
-if (start_to)   push(`l.start_date <= $?`, start_to);
-if (role)       push(`u.role = $?`, role);
+  if (q)         { args.push(`%${q}%`); where.push(`(u.email ILIKE $${args.length} OR u.control_number ILIKE $${args.length})`); }
+  if (period_id) { args.push(Number(period_id)); where.push(`l.period_id = $${args.length}`); }
+  if (start_from){ args.push(start_from); where.push(`l.start_date >= $${args.length}`); }
+  if (start_to)  { args.push(start_to);   where.push(`l.start_date <= $${args.length}`); }
+  if (role)      { args.push(String(role).toLowerCase()); where.push(`u.role = $${args.length}`); }
+  if (sex)       { args.push(String(sex).toUpperCase());  where.push(`u.sex  = $${args.length}`); }
 
-// ⚠️ Tu BD usa 'H' | 'M' | 'X'. Si el front manda 'F', lo normalizamos a 'M' (Mujer)
-if (sex) {
-  push(`u.sex = $?`, sex);
-}
-
-if (status) push(`l.status = $?`, status);
-
-// Solo vencidos con al menos un ítem sin devolver
-if (only_overdue === '1') {
-  where.push(`(
-    l.due_date < CURRENT_DATE
-    AND EXISTS (
+  // Sólo préstamos vencidos con algún ítem sin devolver
+  if (only_overdue === '1') {
+    where.push(`(l.due_date < CURRENT_DATE AND EXISTS (
       SELECT 1 FROM loan_items li2
-      WHERE li2.loan_id=l.id AND li2.returned_at IS NULL
-    )
-  )`);
-}
+      WHERE li2.loan_id = l.id AND li2.returned_at IS NULL
+    ))`);
+  }
 
-  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   try {
     const { rows } = await pool.query(
@@ -592,7 +611,7 @@ if (only_overdue === '1') {
         u.id             AS person_id,
         (u.first_name || ' ' || u.last_name) AS person_name,
         u.control_number AS person_control,
-        u.sex            AS person_sex,
+        u.sex            AS person_sex,      -- se almacena 'M'/'F'; en reportes lo mapearás a 'H'/'M'
         u.role           AS person_role,
         u.email          AS person_email,
         c.name           AS career_name,
@@ -609,11 +628,15 @@ if (only_overdue === '1') {
         li.renewal_count,
         li.returned_at,
         li.fine_cents,
+  COALESCE(p.sum_pay, 0)        AS paid_cents,
+  GREATEST(li.fine_cents - COALESCE(p.sum_pay,0), 0) AS debt_cents,
+  CASE WHEN li.returned_at IS NOT NULL AND li.returned_at::date > l.due_date::date THEN true ELSE false END AS was_overdue,       
 
+        -- Deriva el estado del ÍTEM SIN usar li.status:
         CASE
-          WHEN li.returned_at IS NOT NULL THEN 'RETURNED'
-          WHEN l.status = 'overdue'        THEN 'OVERDUE'
-          ELSE 'CHECKED_OUT'
+          WHEN li.returned_at IS NOT NULL THEN 'returned'
+          WHEN l.due_date < CURRENT_DATE   THEN 'overdue'
+          ELSE 'checked_out'
         END AS item_status
       FROM loan_items li
       JOIN loans l             ON l.id = li.loan_id
@@ -621,6 +644,13 @@ if (only_overdue === '1') {
       LEFT JOIN careers c      ON c.id = u.career_id
       JOIN academic_periods ap ON ap.id = l.period_id
       JOIN books b             ON b.id = li.book_id
+
+      LEFT JOIN (
+  SELECT loan_item_id, SUM(amount_cents)::int AS sum_pay
+  FROM payments
+  GROUP BY loan_item_id
+) p ON p.loan_item_id = li.id
+
       ${whereSql}
       ORDER BY li.id DESC
       LIMIT $${args.length+1} OFFSET $${args.length+2}
@@ -629,11 +659,13 @@ if (only_overdue === '1') {
     );
 
     const { rows: tc } = await pool.query(
-      `SELECT COUNT(*)::int AS total
-         FROM loan_items li
-         JOIN loans l ON l.id = li.loan_id
-         JOIN users u ON u.id = l.user_id
-         ${whereSql}`,
+      `
+      SELECT COUNT(*)::int AS total
+      FROM loan_items li
+      JOIN loans l ON l.id = li.loan_id
+      JOIN users u ON u.id = l.user_id
+      ${whereSql}
+      `,
       args
     );
 
@@ -661,9 +693,9 @@ export async function cancelLoan(req, res) {
       if (!lr[0]) throw new Error('loan no encontrado');
       const currentStatus = String(lr[0].status);
 
-      if (currentStatus === 'canceled') {
+      if (currentStatus === 'cancelled') {
         // Ya estaba cancelado: idempotente
-        return { status: 'canceled', updated: false };
+        return { status: 'cancelled', updated: false };
       }
 
       // 2) No permitir cancelar si YA hay ítems devueltos (regla de negocio)
@@ -685,11 +717,11 @@ export async function cancelLoan(req, res) {
 
       // 4) Cambiar estado del préstamo
       await client.query(
-        `UPDATE loans SET status='canceled', updated_at=NOW() WHERE id=$1`,
+        `UPDATE loans SET status='cancelled', updated_at=NOW() WHERE id=$1`,
         [loanId]
       );
 
-      return { status: 'canceled', updated: true };
+      return { status: 'cancelled', updated: true };
     });
 
     return res.json({ ok: true, status: out.status });
@@ -787,3 +819,82 @@ export async function previewDueDate(req, res) {
     res.status(500).json({ error: err.message || 'previewDueDate failed' })
   }
 }
+
+// === MARCAR ÍTEM PERDIDO ===
+export async function markItemLost(req, res) {
+  const itemId = Number(req.params.itemId);
+  if (!itemId) return res.status(400).json({ error: 'itemId inválido' });
+
+  try {
+    const row = await inTx(async (client) => {
+      // Lock + estado del préstamo
+      const { rows: st } = await client.query(
+        `SELECT li.id, li.status, li.returned_at, l.status AS loan_status
+           FROM loan_items li
+           JOIN loans l ON l.id = li.loan_id
+          WHERE li.id=$1
+          FOR UPDATE`,
+        [itemId]
+      );
+      if (!st[0]) throw new Error('loan_item no encontrado');
+      if (st[0].loan_status === 'canceled') throw new Error('No se puede marcar perdido: préstamo cancelado');
+      if (st[0].status === 'lost') return st[0];        // idempotente
+      if (st[0].status === 'returned') throw new Error('Ítem ya devuelto');
+
+      const { rows } = await client.query(
+        `UPDATE loan_items
+            SET status='lost', returned_at=NULL
+          WHERE id=$1
+          RETURNING id, status, returned_at, fine_cents`,
+        [itemId]
+      );
+      return rows[0];
+    });
+
+    return res.json({ loan_item_id: row.id, status: row.status, returned_at: row.returned_at, fine_cents: row.fine_cents });
+  } catch (err) {
+    console.error('[markItemLost]', err);
+    return res.status(500).json({ error: err.message || 'markItemLost failed' });
+  }
+}
+
+// === MARCAR ÍTEM DAÑADO ===
+export async function markItemDamaged(req, res) {
+  const itemId = Number(req.params.itemId);
+  if (!itemId) return res.status(400).json({ error: 'itemId inválido' });
+
+  try {
+    const row = await inTx(async (client) => {
+      const { rows: st } = await client.query(
+        `SELECT li.id, li.status, li.returned_at, l.status AS loan_status
+           FROM loan_items li
+           JOIN loans l ON l.id = li.loan_id
+          WHERE li.id=$1
+          FOR UPDATE`,
+        [itemId]
+      );
+      if (!st[0]) throw new Error('loan_item no encontrado');
+      if (st[0].loan_status === 'canceled') throw new Error('No se puede marcar dañado: préstamo cancelado');
+      if (st[0].status === 'damaged') return st[0];    // idempotente
+      if (st[0].status === 'returned') throw new Error('Ítem ya devuelto');
+
+      const { rows } = await client.query(
+        `UPDATE loan_items
+            SET status='damaged', returned_at=NULL
+          WHERE id=$1
+          RETURNING id, status, returned_at, fine_cents`,
+        [itemId]
+      );
+      return rows[0];
+    });
+
+    return res.json({ loan_item_id: row.id, status: row.status, returned_at: row.returned_at, fine_cents: row.fine_cents });
+  } catch (err) {
+    console.error('[markItemDamaged]', err);
+    return res.status(500).json({ error: err.message || 'markItemDamaged failed' });
+  }
+}
+
+
+
+

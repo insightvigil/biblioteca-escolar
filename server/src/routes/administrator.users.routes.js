@@ -9,6 +9,7 @@ import {
   deleteUser,   // DELETE /admin/users/:id
 } from '../controllers/users.controller.js'
 import { listCareers } from '../controllers/admin-loans.controller.js' // ya la tienes
+import { getAllLibraryUsers, getLibraryUserById,createLibraryUser,updateLibraryUser } from '../controllers/admin-library-users.controller.js'
 
 const r = Router()
 
@@ -25,4 +26,10 @@ r.delete('/users/:id', deleteUser)
 // Catálogo auxiliar:
 r.get('/careers', listCareers)
 
+// CRUD Library Users
+r.get('/libraryUsers', getAllLibraryUsers)
+r.get('/libraryUsers/:id', getLibraryUserById)
+r.post('/libraryUsers', createLibraryUser)
+r.put('/libraryUsers/:id', updateLibraryUser)
+//r.delete('/libraryUsers/:id', deleteLibraryUser)
 export default r

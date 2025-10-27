@@ -19,6 +19,8 @@ r.post('/loans/:loanId/items/:itemId/renew', C.renewLoanItem)
 r.post('/loans/:loanId/items/:itemId/return', C.returnLoanItem)
 r.post('/loans/:loanId/items/:itemId/payments', C.registerPayment)
 
+
+
 r.post('/loans/:loanId/cancel', C.cancelLoan)
 
 export default r
